@@ -1,4 +1,5 @@
 import { LitNodeClient } from '@lit-protocol/lit-node-client';
+import { encryptString, decryptToString } from '@lit-protocol/encryption';
 
 let litNodeClient = null;
 let isConnecting = false;
@@ -21,9 +22,8 @@ async function initWithRetry(maxRetries = 3, onRetry = null) {
       
       litNodeClient = new LitNodeClient({
         litNetwork: 'datil-dev',
-        debug: attempt === 1, // Only debug first attempt
-        alertWhenUnauthorized: false,
         checkNodeAttestation: false,
+        debug: attempt === 1,
       });
 
       // 30-second timeout per attempt
@@ -140,25 +140,32 @@ export async function encryptFile(file, walletAddress) {
 
     console.log('Lit client ready, proceeding with encryption');
 
-    // Read file as ArrayBuffer
+    // Read file as ArrayBuffer and convert to base64 string
     const fileBuffer = await file.arrayBuffer();
-    const dataToEncrypt = new Uint8Array(fileBuffer);
+    const uint8Array = new Uint8Array(fileBuffer);
+    
+    // Convert binary data to base64 string for encryption
+    const base64String = btoa(String.fromCharCode(...uint8Array));
 
     // Create access control conditions
     const accessControlConditions = createAccessControlConditions(walletAddress);
 
     console.log('Encrypting with access control conditions:', accessControlConditions);
 
-    // Encrypt the file using the v7 API
-    const { ciphertext, dataToEncryptHash } = await litNodeClient.encrypt({
-      accessControlConditions,
-      dataToEncrypt,
-    });
+    // Encrypt using the v7 encryptString API from @lit-protocol/encryption
+    const { ciphertext, dataToEncryptHash } = await encryptString(
+      {
+        accessControlConditions,
+        dataToEncrypt: base64String,
+      },
+      litNodeClient
+    );
 
     console.log('Encryption successful, ciphertext length:', ciphertext.length);
 
-    // Create a Blob from the encrypted data
-    const encryptedBlob = new Blob([ciphertext], { type: 'application/octet-stream' });
+    // Convert ciphertext string back to Uint8Array for storage
+    const encryptedData = new TextEncoder().encode(ciphertext);
+    const encryptedBlob = new Blob([encryptedData], { type: 'application/octet-stream' });
 
     // Create a File object from the Blob
     const encryptedFile = new File(
