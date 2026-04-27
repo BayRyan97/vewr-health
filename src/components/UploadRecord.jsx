@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { encryptFile } from '../lib/webCryptoEncryption';
-import { PinataSDK } from 'pinata';
 
 function UploadRecord() {
   const [file, setFile] = useState(null);
@@ -60,15 +59,37 @@ function UploadRecord() {
       // Step 2: Upload encrypted file to IPFS
       setUploading(true);
       console.log('📤 Uploading encrypted file to IPFS...');
+      console.log('JWT available:', jwt ? 'Yes' : 'No');
+      console.log('JWT length:', jwt?.length || 0);
 
-      // Initialize Pinata SDK
-      const pinata = new PinataSDK({
-        pinataJwt: jwt,
+      const formData = new FormData();
+      formData.append('file', encryptedFile);
+
+      const response = await fetch('https://uploads.pinata.cloud/v3/files', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${jwt}`,
+        },
+        body: formData,
       });
 
-      // Upload file using Pinata SDK
-      const upload = await pinata.upload.file(encryptedFile);
-      const uploadedCid = upload.cid;
+      console.log('Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Upload failed:', errorText);
+        throw new Error(`Upload failed (${response.status}): ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('Upload response:', data);
+      
+      // Pinata v3 returns CID in data.cid
+      const uploadedCid = data.data?.cid || data.cid;
+      
+      if (!uploadedCid) {
+        throw new Error('No CID returned from Pinata');
+      }
 
       console.log('✅ Encrypted file uploaded to IPFS');
       console.log('CID:', uploadedCid);
