@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { encryptFile } from '../lib/webCryptoEncryption';
+import { PinataSDK } from 'pinata';
 
 function UploadRecord() {
   const [file, setFile] = useState(null);
@@ -60,33 +61,14 @@ function UploadRecord() {
       setUploading(true);
       console.log('📤 Uploading encrypted file to IPFS...');
 
-      const formData = new FormData();
-      formData.append('file', encryptedFile);
-
-      const response = await fetch('https://uploads.pinata.cloud/v3/files', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${jwt}`,
-        },
-        body: formData,
+      // Initialize Pinata SDK
+      const pinata = new PinataSDK({
+        pinataJwt: jwt,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Upload failed' }));
-        throw new Error(errorData.message || `Upload failed: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      
-      // Pinata v3 API returns the CID in data.cid
-      let uploadedCid;
-      if (data.data && data.data.cid) {
-        uploadedCid = data.data.cid;
-      } else if (data.cid) {
-        uploadedCid = data.cid;
-      } else {
-        throw new Error('No CID returned from Pinata');
-      }
+      // Upload file using Pinata SDK
+      const upload = await pinata.upload.file(encryptedFile);
+      const uploadedCid = upload.cid;
 
       console.log('✅ Encrypted file uploaded to IPFS');
       console.log('CID:', uploadedCid);
