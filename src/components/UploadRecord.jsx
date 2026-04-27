@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { initLitClient, encryptFile } from '../lib/litEncryption';
+import React, { useState } from 'react';
+import { encryptFile } from '../lib/webCryptoEncryption';
 
 function UploadRecord() {
   const [file, setFile] = useState(null);
@@ -8,36 +8,11 @@ function UploadRecord() {
   const [cid, setCid] = useState(null);
   const [encryptionMetadata, setEncryptionMetadata] = useState(null);
   const [error, setError] = useState(null);
-  const [litReady, setLitReady] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState('');
-  const [retryAttempt, setRetryAttempt] = useState(0);
+  const [uploadedRecords, setUploadedRecords] = useState([]);
 
   // For now, use a placeholder wallet address
   // TODO: Replace with actual user wallet from Privy
   const walletAddress = '0x0000000000000000000000000000000000000000';
-
-  // Initialize Lit Protocol on component mount
-  useEffect(() => {
-    const initLit = async () => {
-      try {
-        setConnectionStatus('Connecting to encryption network...');
-        await initLitClient((attempt, max) => {
-          setRetryAttempt(attempt);
-          setConnectionStatus(`Connecting... Attempt ${attempt}/${max}`);
-        });
-        setLitReady(true);
-        setConnectionStatus('🔒 Encryption Ready');
-        setRetryAttempt(0);
-        console.log('✅ Lit Protocol initialized - encryption enabled');
-      } catch (err) {
-        console.error('⚠️ Failed to initialize Lit Protocol:', err);
-        setConnectionStatus('⚠️ Encryption unavailable - connection failed');
-        setLitReady(false);
-        setError('Unable to connect to encryption network. Please check your internet connection and try refreshing the page.');
-      }
-    };
-    initLit();
-  }, []);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -71,31 +46,22 @@ function UploadRecord() {
     setEncryptionMetadata(null);
 
     try {
-      let fileToUpload = file;
-      let metadata = null;
+      // Step 1: Encrypt the file with Web Crypto API
+      setEncrypting(true);
+      console.log('🔐 Encrypting file with Web Crypto API (AES-256-GCM)...');
+      
+      const { encryptedFile, metadata } = await encryptFile(file, walletAddress);
+      
+      console.log('✅ File encrypted successfully');
+      console.log('📊 Metadata:', metadata);
+      setEncrypting(false);
 
-      // Step 1: Encrypt the file if Lit Protocol is ready
-      if (litReady) {
-        setEncrypting(true);
-        console.log('🔐 Encrypting file with Lit Protocol...');
-        
-        const { encryptedFile, metadata: encryptMetadata } = await encryptFile(file, walletAddress);
-        fileToUpload = encryptedFile;
-        metadata = encryptMetadata;
-        
-        console.log('✅ File encrypted successfully');
-        console.log('Metadata:', metadata);
-        setEncrypting(false);
-      } else {
-        console.log('⚠️ Uploading without encryption (Lit Protocol unavailable)');
-      }
-
-      // Step 2: Upload file to IPFS
+      // Step 2: Upload encrypted file to IPFS
       setUploading(true);
-      console.log('📤 Uploading to IPFS...');
+      console.log('📤 Uploading encrypted file to IPFS...');
 
       const formData = new FormData();
-      formData.append('file', fileToUpload);
+      formData.append('file', encryptedFile);
 
       const response = await fetch('https://uploads.pinata.cloud/v3/files', {
         method: 'POST',
@@ -122,26 +88,30 @@ function UploadRecord() {
         throw new Error('No CID returned from Pinata');
       }
 
-      console.log('✅ File uploaded to IPFS');
+      console.log('✅ Encrypted file uploaded to IPFS');
       console.log('CID:', uploadedCid);
-      console.log('Encrypted:', litReady ? 'Yes' : 'No');
 
-      // Store the CID with the metadata
-      const fullMetadata = metadata ? {
+      // Create full metadata with CID
+      const fullMetadata = {
         ...metadata,
         ipfsCid: uploadedCid,
-        encrypted: true,
-      } : {
-        ipfsCid: uploadedCid,
-        encrypted: false,
-        originalFileName: file.name,
       };
 
       setCid(uploadedCid);
       setEncryptionMetadata(fullMetadata);
 
-      // TODO: Save metadata to database
-      console.log('📝 Save this metadata:', fullMetadata);
+      // Store in local state (will be replaced with database later)
+      const newRecord = {
+        id: Date.now(),
+        cid: uploadedCid,
+        metadata: fullMetadata,
+        uploadedAt: new Date().toISOString(),
+      };
+      
+      setUploadedRecords(prev => [newRecord, ...prev]);
+      
+      console.log('📝 Record stored locally:', newRecord);
+      console.log('💾 All records:', uploadedRecords.length + 1);
 
     } catch (err) {
       setError(err.message || 'Failed to encrypt and upload file');
@@ -178,30 +148,10 @@ function UploadRecord() {
           marginBottom: 0,
           lineHeight: '1.5'
         }}>
-          Upload PDF or image files (PNG, JPG, JPEG)
+          Files are encrypted in your browser with AES-256-GCM before upload
         </p>
       </div>
       
-      {/* Encryption Status */}
-      {connectionStatus && (
-        <div style={{ 
-          padding: '12px 16px',
-          backgroundColor: litReady ? '#d4edda' : connectionStatus.includes('Connecting') ? '#e3f2fd' : '#fff3cd',
-          border: litReady ? '1px solid #c3e6cb' : connectionStatus.includes('Connecting') ? '1px solid #90caf9' : '1px solid #ffc107',
-          borderRadius: '8px',
-          marginBottom: '20px',
-          fontSize: '14px',
-          color: litReady ? '#155724' : connectionStatus.includes('Connecting') ? '#1976d2' : '#856404'
-        }}>
-          {connectionStatus}
-          {retryAttempt > 0 && (
-            <div style={{ fontSize: '12px', marginTop: '4px', opacity: 0.8 }}>
-              Please wait...
-            </div>
-          )}
-        </div>
-      )}
-
       <div style={{ marginBottom: '24px' }}>
         <label 
           htmlFor="file-upload"
@@ -293,32 +243,21 @@ function UploadRecord() {
 
       <button
         onClick={uploadToIPFS}
-        disabled={!file || uploading || encrypting || !litReady}
+        disabled={!file || uploading || encrypting}
         style={{
           width: '100%',
           padding: '14px 24px',
-          backgroundColor: uploading || encrypting || !file || !litReady ? '#e9ecef' : '#0085ff',
-          color: uploading || encrypting || !file || !litReady ? '#6c757d' : 'white',
+          backgroundColor: uploading || encrypting || !file ? '#e9ecef' : '#0085ff',
+          color: uploading || encrypting || !file ? '#6c757d' : 'white',
           border: 'none',
           borderRadius: '8px',
-          cursor: uploading || encrypting || !file || !litReady ? 'not-allowed' : 'pointer',
+          cursor: uploading || encrypting || !file ? 'not-allowed' : 'pointer',
           fontSize: '15px',
           fontWeight: '600',
           transition: 'all 0.2s',
           letterSpacing: '0.3px'
-        }}
-        onMouseEnter={(e) => {
-          if (!uploading && !encrypting && file && litReady) {
-            e.target.style.backgroundColor = '#0070dd';
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!uploading && !encrypting && file && litReady) {
-            e.target.style.backgroundColor = '#0085ff';
-          }
-        }}
-      >
-        {encrypting ? '🔐 Encrypting...' : uploading ? '📤 Uploading...' : !litReady ? '⚠️ Waiting for encryption...' : '🔒 Encrypt & Upload to IPFS'}
+        }}>
+        {encrypting ? '🔐 Encrypting...' : uploading ? '📤 Uploading...' : '🔒 Encrypt & Upload to IPFS'}
       </button>
 
       {error && (
@@ -372,10 +311,10 @@ function UploadRecord() {
               border: '1px solid #c3e6cb'
             }}>
               <div style={{ fontSize: '13px', color: '#155724', fontWeight: '500', marginBottom: '4px' }}>
-                🔐 End-to-End Encrypted
+                🔐 End-to-End Encrypted (AES-256-GCM)
               </div>
               <div style={{ fontSize: '12px', color: '#155724', lineHeight: '1.5' }}>
-                Your file was encrypted in your browser before upload. Only you can decrypt it.
+                Your file was encrypted in your browser with Web Crypto API before upload. Only you can decrypt it.
               </div>
             </div>
           )}
