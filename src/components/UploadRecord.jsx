@@ -53,6 +53,8 @@ function UploadRecord() {
       const { encryptedFile, metadata } = await encryptFile(file, walletAddress);
       
       console.log('✅ File encrypted successfully');
+      console.log('📊 Original size:', file.size, 'bytes');
+      console.log('📊 Encrypted size:', encryptedFile.size, 'bytes');
       console.log('📊 Metadata:', metadata);
       setEncrypting(false);
 
