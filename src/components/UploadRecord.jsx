@@ -60,12 +60,12 @@ function UploadRecord() {
       setUploading(true);
       console.log('📤 Uploading encrypted file to IPFS...');
       console.log('JWT available:', jwt ? 'Yes' : 'No');
-      console.log('JWT length:', jwt?.length || 0);
 
       const formData = new FormData();
       formData.append('file', encryptedFile);
 
-      const response = await fetch('https://uploads.pinata.cloud/v3/files', {
+      // Use Pinata v2 pinning API (has CORS support for localhost)
+      const response = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${jwt}`,
@@ -84,8 +84,8 @@ function UploadRecord() {
       const data = await response.json();
       console.log('Upload response:', data);
       
-      // Pinata v3 returns CID in data.cid
-      const uploadedCid = data.data?.cid || data.cid;
+      // Pinata v2 returns CID in IpfsHash
+      const uploadedCid = data.IpfsHash;
       
       if (!uploadedCid) {
         throw new Error('No CID returned from Pinata');
