@@ -26,6 +26,7 @@ async function generateKey() {
  * @param {string} signature - Signature from wallet.signMessage()
  * @returns {Promise<CryptoKey>} Derived encryption key
  */
+// eslint-disable-next-line no-unused-vars
 async function deriveKeyFromSignature(walletAddress, signature) {
   // Convert signature to bytes
   const signatureBytes = new TextEncoder().encode(signature);

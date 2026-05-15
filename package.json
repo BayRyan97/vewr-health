@@ -4,6 +4,7 @@
   "private": true,
   "homepage": "https://vewr.io",
   "dependencies": {
+    "@farcaster/mini-app-solana": "^2.0.0",
     "@lit-protocol/encryption": "^7.4.0",
     "@lit-protocol/lit-node-client": "^7.4.0",
     "@lit-protocol/uint8arrays": "^7.4.0",
