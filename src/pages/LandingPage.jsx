@@ -139,10 +139,12 @@ function FaqSection({ T, AMBER, ROSE }) {
   );
 }
 
+
 function LandingPage() {
   const [email, setEmail] = useState('');
   const [submitState, setSubmitState] = useState('idle');
   const navigate = useNavigate();
+
 
   const handleWaitlist = async (e) => {
     e.preventDefault();
@@ -263,7 +265,7 @@ function LandingPage() {
               marginBottom: '28px',
             }}>
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: T, boxShadow: `0 0 8px ${T}` }} />
-              PATIENT-CONTROLLED HEALTH DATA
+              YOUR RECORDS. YOUR KEYS.
             </div>
 
             <h1 style={{
@@ -271,14 +273,14 @@ function LandingPage() {
               lineHeight: '1.1', letterSpacing: '-2px',
               color: 'white', margin: '0 0 12px 0',
             }}>
-              Your health data
-              <br />is bought and sold
+              One place for every
+              <br />record of your life.
               <br />
               <span style={{
                 background: `linear-gradient(90deg, ${T}, #4dd9d5)`,
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
               }}>
-                without you.
+                Under your control.
               </span>
             </h1>
 
@@ -286,24 +288,9 @@ function LandingPage() {
               fontSize: '16px', color: 'rgba(255,255,255,0.5)',
               lineHeight: '1.75', margin: '0 0 36px 0', maxWidth: '420px',
             }}>
-              133 million Americans have their records exposed every year — not from hacks,
-              from the system working as designed. Vewr gives it back.{' '}
-              <a
-                href="https://ocrportal.hhs.gov/ocr/breach/breach_report.jsf"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  color: 'rgba(255,255,255,0.25)',
-                  fontSize: '11px',
-                  verticalAlign: 'super',
-                  textDecoration: 'none',
-                  borderBottom: '1px solid rgba(255,255,255,0.15)',
-                  lineHeight: 1,
-                }}
-                title="Source: HHS Office for Civil Rights, HIPAA Breach Reporting Tool (2023)"
-              >
-                HHS OCR
-              </a>
+              Your medical history is scattered across hospitals, portals, and providers
+              you can barely log into. Vewr brings it together in one place — and only
+              you hold the key.
             </p>
 
             {submitState === 'success' ? (
@@ -855,6 +842,7 @@ function LandingPage() {
           </a>
         </div>
       </footer>
+
 
     </div>
   );
