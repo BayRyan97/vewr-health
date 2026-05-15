@@ -248,13 +248,11 @@ function LandingPage() {
           pointerEvents: 'none',
         }} />
 
-        {/* two-column layout */}
-        <div className="vw-hero-grid" style={{
-          maxWidth: '1080px', margin: '0 auto', width: '100%',
-          display: 'grid', gridTemplateColumns: '1fr 1fr',
-          gap: '64px', alignItems: 'center', position: 'relative',
+        {/* hero copy — centered */}
+        <div style={{
+          maxWidth: '720px', margin: '0 auto', width: '100%',
+          position: 'relative', textAlign: 'center',
         }}>
-          {/* LEFT: copy + form */}
           <div>
             {/* badge */}
             <div style={{
@@ -286,7 +284,8 @@ function LandingPage() {
 
             <p style={{
               fontSize: '16px', color: 'rgba(255,255,255,0.5)',
-              lineHeight: '1.75', margin: '0 0 36px 0', maxWidth: '420px',
+              lineHeight: '1.75', margin: '0 0 36px 0', maxWidth: '520px',
+              marginLeft: 'auto', marginRight: 'auto',
             }}>
               Your medical history is scattered across hospitals, portals, and providers
               you can barely log into. Vewr brings it together in one place — and only
@@ -308,7 +307,8 @@ function LandingPage() {
                 <form onSubmit={handleWaitlist} style={{
                   display: 'flex', background: 'rgba(255,255,255,0.05)',
                   border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: '12px', padding: '5px', gap: '6px', maxWidth: '400px',
+                  borderRadius: '12px', padding: '5px', gap: '6px',
+                  maxWidth: '400px', margin: '0 auto',
                 }}>
                   <input
                     type="email" required
@@ -337,7 +337,7 @@ function LandingPage() {
             )}
 
             {/* trust pills */}
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '32px' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '32px', justifyContent: 'center' }}>
               {[
                 { label: 'Sign in with email', icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> },
                 { label: 'Browser-encrypted', icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> },
@@ -352,96 +352,6 @@ function LandingPage() {
                   {icon}{label}
                 </div>
               ))}
-            </div>
-          </div>
-
-          {/* RIGHT: vault mockup */}
-          <div className="vw-hero-vault" style={{ position: 'relative' }}>
-            {/* glow behind card */}
-            <div style={{
-              position: 'absolute', top: '50%', left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: '300px', height: '300px', borderRadius: '50%',
-              background: `radial-gradient(circle, ${T}20 0%, transparent 70%)`,
-              pointerEvents: 'none',
-            }} />
-            <div style={{
-              background: '#0d1117', borderRadius: '20px', padding: '24px',
-              border: '1px solid rgba(255,255,255,0.08)',
-              boxShadow: `0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)`,
-              position: 'relative',
-            }}>
-              {/* vault header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{
-                    width: '34px', height: '34px', borderRadius: '9px',
-                    background: `${T}20`, border: `1px solid ${T}30`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2">
-                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                    </svg>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>Your Health Vault</div>
-                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)' }}>End-to-end encrypted</div>
-                  </div>
-                </div>
-                <div style={{
-                  background: `${T}18`, color: T, border: `1px solid ${T}30`,
-                  padding: '3px 9px', borderRadius: '6px', fontSize: '11px', fontWeight: '600',
-                }}>
-                  🔒 Locked
-                </div>
-              </div>
-
-              <div style={{ fontSize: '10px', fontWeight: '700', color: 'rgba(255,255,255,0.25)', letterSpacing: '1px', marginBottom: '10px' }}>
-                YOUR RECORDS
-              </div>
-
-              {[
-                { name: 'Blood Panel — Jan 2025', type: 'PDF', color: T },
-                { name: 'MRI Scan — Dec 2024', type: 'IMG', color: AMBER },
-                { name: 'Vaccination Record', type: 'PDF', color: T },
-                { name: 'Prescription — Nov 2024', type: 'PDF', color: AMBER },
-              ].map((r, i) => (
-                <div key={r.name} style={{
-                  display: 'flex', alignItems: 'center', gap: '10px',
-                  padding: '10px 12px', borderRadius: '9px',
-                  background: i % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'transparent',
-                  border: '1px solid rgba(255,255,255,0.05)',
-                  marginBottom: '6px',
-                }}>
-                  <div style={{
-                    width: '28px', height: '28px', borderRadius: '7px',
-                    background: `${r.color}18`, border: `1px solid ${r.color}25`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                  }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={r.color} strokeWidth="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                      <polyline points="14 2 14 8 20 8"/>
-                    </svg>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '12px', fontWeight: '500', color: 'rgba(255,255,255,0.8)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
-                  </div>
-                  <span style={{ fontSize: '9px', fontWeight: '700', color: 'rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '3px' }}>{r.type}</span>
-                </div>
-              ))}
-
-              <div style={{
-                marginTop: '16px', padding: '12px',
-                background: `${T}08`, border: `1px solid ${T}20`,
-                borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px',
-              }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2">
-                  <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                </svg>
-                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', lineHeight: '1.4' }}>
-                  Only you can decrypt these files. Not even Vewr can read them.
-                </span>
-              </div>
             </div>
           </div>
         </div>
