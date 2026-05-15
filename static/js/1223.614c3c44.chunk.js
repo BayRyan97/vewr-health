@@ -1,0 +1,1 @@
+"use strict";(globalThis.webpackChunkvewr_health=globalThis.webpackChunkvewr_health||[]).push([[1223],{31223(e,h,a){a.d(h,{createPublicClient:()=>l.l,defineChain:()=>i.x,http:()=>t.L});var l=a(85668),t=a(10148),i=a(76919)}}]);
