@@ -29,6 +29,17 @@
       Gotham SSm — add your Cloud.typography CSS link here:
       <link rel="stylesheet" type="text/css" href="https://cloud.typography.com/XXXXXX/YYYYYY/css/fonts.css" />
     -->
+    <script>
+      // Restore path encoded by 404.html for SPA routing on GitHub Pages
+      (function() {
+        var p = window.location.search.match(/[?&]p=([^&]+)/);
+        if (p) {
+          var path = decodeURIComponent(p[1]);
+          var hash = window.location.search.match(/[?&]q=([^&]*)/);
+          window.history.replaceState(null, null, path + (hash ? decodeURIComponent(hash[1]) : ''));
+        }
+      })();
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
