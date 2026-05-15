@@ -42,6 +42,11 @@ const FAQS = [
     a: `Currently: PDF, PNG, JPG, and JPEG. These cover the vast majority of medical documents — lab results, imaging reports, prescriptions, vaccination records, and insurance documents.\n\nSupport for DICOM (raw medical imaging), HL7, and FHIR formats is on the roadmap for the provider-facing version.`,
     tag: 'Files',
   },
+  {
+    q: 'If I delete a record, is it actually gone?',
+    a: `Not in the way you're probably thinking — and we'd rather tell you that upfront.\n\nWhen you delete a record, two things happen: we remove it from your Vewr account and we unpin it from our storage node, which means we stop paying to keep it alive on IPFS. But IPFS is a decentralized network — if any other node cached your file in the brief window it was live, that node could theoretically hold it indefinitely.\n\nHere's why that's less scary than it sounds: what's on IPFS is never your actual medical record. It's AES-256-GCM encrypted ciphertext — a mathematically scrambled blob that is completely unreadable without your decryption key. The key never touched IPFS. So even in the worst case where a cached copy persists somewhere on the network forever, anyone who finds it sees random noise. There's no medical data to expose.\n\nTrue deletion of plaintext isn't a concern because plaintext never left your device in the first place. What you're really deleting is the only key that makes the file meaningful — and that stays yours.`,
+    tag: 'Deletion',
+  },
 ];
 
 function FaqItem({ faq, index, T, AMBER, ROSE }) {

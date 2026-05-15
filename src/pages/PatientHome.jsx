@@ -190,9 +190,11 @@ async function fetchFromIPFS(cid) {
   throw new Error('Could not retrieve file from IPFS. Try again in a moment.');
 }
 
-function RecordsList({ records }) {
+function RecordsList({ records, onDelete }) {
   const [downloading, setDownloading] = useState({}); // { [recordId]: 'fetching' | 'decrypting' | null }
   const [dlError, setDlError] = useState({});
+  const [confirmDelete, setConfirmDelete] = useState(null); // record id awaiting confirmation
+  const [deleting, setDeleting] = useState({}); // { [recordId]: true }
 
   const handleDownload = async (record) => {
     const { id, cid, metadata } = record;
@@ -229,6 +231,22 @@ function RecordsList({ records }) {
     }
   };
 
+  const handleDeleteClick = (record) => {
+    if (confirmDelete === record.id) {
+      // Second click — execute delete
+      setDeleting(prev => ({ ...prev, [record.id]: true }));
+      setConfirmDelete(null);
+      onDelete(record).finally(() => {
+        setDeleting(prev => ({ ...prev, [record.id]: false }));
+      });
+    } else {
+      // First click — arm confirmation
+      setConfirmDelete(record.id);
+      // Auto-cancel after 3 s if user doesn't confirm
+      setTimeout(() => setConfirmDelete(id => id === record.id ? null : id), 3000);
+    }
+  };
+
   if (records.length === 0) {
     return (
       <div style={{
@@ -261,6 +279,8 @@ function RecordsList({ records }) {
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         .dl-btn:hover { background: #f0fdfb !important; border-color: ${T} !important; color: ${T} !important; }
+        .del-btn:hover { background: #fef2f2 !important; border-color: #fca5a5 !important; color: #dc2626 !important; }
+        .del-confirm:hover { background: #dc2626 !important; color: white !important; }
       `}</style>
       {records.map(record => {
         const name = record.metadata?.originalFileName || 'Medical Record';
@@ -272,15 +292,18 @@ function RecordsList({ records }) {
           : '';
         const dlState = downloading[record.id];
         const err = dlError[record.id];
+        const isConfirming = confirmDelete === record.id;
+        const isDeletingThis = deleting[record.id];
 
         return (
           <div key={record.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <div style={{
               background: 'white', borderRadius: '12px',
-              border: `1px solid ${err ? '#fecaca' : '#e5e7eb'}`,
+              border: `1px solid ${isConfirming ? '#fca5a5' : err ? '#fecaca' : '#e5e7eb'}`,
               padding: '18px 24px',
               display: 'flex', alignItems: 'center',
               justifyContent: 'space-between', gap: '16px',
+              transition: 'border-color 0.2s',
             }}>
               {/* Left: file info */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
@@ -322,15 +345,15 @@ function RecordsList({ records }) {
                 <button
                   className="dl-btn"
                   onClick={() => handleDownload(record)}
-                  disabled={!!dlState}
+                  disabled={!!dlState || isDeletingThis}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '6px',
                     padding: '7px 14px', borderRadius: '8px',
                     border: '1px solid #e5e7eb', background: 'white',
                     color: '#374151', fontSize: '13px', fontWeight: '500',
-                    cursor: dlState ? 'not-allowed' : 'pointer',
+                    cursor: (dlState || isDeletingThis) ? 'not-allowed' : 'pointer',
                     fontFamily: FONT, transition: 'all 0.15s',
-                    opacity: dlState ? 0.7 : 1,
+                    opacity: (dlState || isDeletingThis) ? 0.7 : 1,
                   }}
                 >
                   {dlState ? (
@@ -351,6 +374,48 @@ function RecordsList({ records }) {
                       </svg>
                       Download
                     </>
+                  )}
+                </button>
+
+                {/* Delete button — two-click confirmation */}
+                <button
+                  className={isConfirming ? 'del-confirm' : 'del-btn'}
+                  onClick={() => handleDeleteClick(record)}
+                  disabled={isDeletingThis || !!dlState}
+                  title={isConfirming ? 'Click again to confirm deletion' : 'Delete record'}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                    padding: '7px 12px', borderRadius: '8px',
+                    border: `1px solid ${isConfirming ? '#fca5a5' : '#e5e7eb'}`,
+                    background: isConfirming ? '#fee2e2' : 'white',
+                    color: isConfirming ? '#dc2626' : '#9ca3af',
+                    fontSize: '13px', fontWeight: isConfirming ? '600' : '400',
+                    cursor: (isDeletingThis || dlState) ? 'not-allowed' : 'pointer',
+                    fontFamily: FONT, transition: 'all 0.15s',
+                    opacity: isDeletingThis ? 0.5 : 1,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {isDeletingThis ? (
+                    <div style={{
+                      width: '12px', height: '12px', borderRadius: '50%',
+                      border: '2px solid #dc2626', borderTopColor: 'transparent',
+                      animation: 'spin 0.7s linear infinite',
+                    }} />
+                  ) : isConfirming ? (
+                    <>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      Confirm?
+                    </>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                      <path d="M10 11v6M14 11v6" />
+                      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                    </svg>
                   )}
                 </button>
               </div>
@@ -407,6 +472,34 @@ function Dashboard({ userEmail, userId, onLogout }) {
     };
     loadRecords();
   }, [userId, storageKey]);
+
+  const handleDelete = async (record) => {
+    const { id, cid } = record;
+
+    // 1. Unpin from Pinata (best-effort — don't block on failure)
+    const pinataJwt = process.env.REACT_APP_PINATA_JWT;
+    if (pinataJwt && cid) {
+      try {
+        await fetch(`https://api.pinata.cloud/pinning/unpin/${cid}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${pinataJwt}` },
+        });
+      } catch (e) {
+        // Non-fatal — file may already be unpinned or network issue
+      }
+    }
+
+    // 2. Delete from Supabase or localStorage
+    if (isSupabaseConfigured) {
+      await supabase.from('records').delete().eq('id', id);
+    } else {
+      const updated = records.filter(r => r.id !== id);
+      try { localStorage.setItem(storageKey, JSON.stringify(updated)); } catch (e) {}
+    }
+
+    // 3. Remove from UI
+    setRecords(prev => prev.filter(r => r.id !== id));
+  };
 
   const handleUploadSuccess = async (record) => {
     if (isSupabaseConfigured) {
@@ -601,7 +694,7 @@ function Dashboard({ userEmail, userId, onLogout }) {
         </div>
 
         {activeTab === 'upload' && <UploadRecord onUploadSuccess={handleUploadSuccess} />}
-        {activeTab === 'records' && <RecordsList records={records} />}
+        {activeTab === 'records' && <RecordsList records={records} onDelete={handleDelete} />}
       </div>
     </div>
   );
