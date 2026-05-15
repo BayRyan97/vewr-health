@@ -6,6 +6,134 @@ const T_DARK = '#007F7B';
 const AMBER = '#A17900';
 const ROSE = '#A10053';
 
+const FAQS = [
+  {
+    q: 'Is Vewr HIPAA compliant?',
+    a: `IPFS itself isn't HIPAA compliant out of the box — and we won't pretend otherwise. But Vewr's architecture is designed so that PHI never reaches IPFS in any readable form.\n\nHere's how: your file is encrypted with AES-256-GCM directly in your browser before anything leaves your device. What gets pinned to IPFS is encrypted ciphertext — mathematically unreadable without the decryption key that only you hold. The IPFS network sees a blob of scrambled data, not a medical record.\n\nThis is exactly the architectural approach HIPAA requires for cloud-stored health data: heavy encryption of PHI before it touches any external network. Full technical documentation is available on request for compliance review.`,
+    tag: 'HIPAA',
+  },
+  {
+    q: 'What if I lose access to my account or forget my password?',
+    a: `This works more like a regular account than you might expect. Vewr uses Privy for authentication, which means you sign in with your email and recover access the same way — email + one-time code, no seed phrase required.\n\nUnder the hood, Privy uses MPC (Multi-Party Computation): your encryption key is mathematically split between your device and Privy's infrastructure. Neither half alone can decrypt anything, and neither half alone can be stolen. Recovery just means Privy helps reconstruct your key after verifying your identity via email.\n\nThink of it like MetaMask but without the part where you have to write down 12 words and hope you don't lose them. If you want to export your full recovery phrase for self-custody, you can — but most users never need to.`,
+    tag: 'Access',
+  },
+  {
+    q: 'Can a doctor access my records in an emergency if I\'m unconscious?',
+    a: `Honestly, no — not without your prior action. That's the real tradeoff with end-to-end encryption: nobody can read your records without access you've granted.\n\nThe way to handle this is to pre-share access with a trusted provider or emergency contact before you need it. In Vewr, you can give your primary care physician standing access to your full record — they sign in with their own account and it's there. You can revoke it anytime.\n\nWe're also working on a time-locked emergency access model. But we'd rather be honest about the current limitation than promise something the encryption doesn't support.`,
+    tag: 'Emergency',
+  },
+  {
+    q: 'What is IPFS and why does Vewr use it?',
+    a: `IPFS (InterPlanetary File System) is a decentralized storage network — instead of your files sitting on one company's server, they're distributed across many independent nodes worldwide.\n\nWe use it for one reason: your records shouldn't depend on Vewr staying in business. If we disappeared tomorrow, your encrypted files remain on the IPFS network, accessible to anyone with your CID (content address) and your decryption key. You're not locked into us the way you're locked into Dropbox or a hospital portal.`,
+    tag: 'Technology',
+  },
+  {
+    q: 'How is this different from MyChart or my hospital\'s patient portal?',
+    a: `MyChart and hospital portals give you a *view* of your records — the data still lives on their servers, under their control. They decide what you can see, who else can access it, and you lose that access the moment you change providers or they shut down the portal.\n\nVerw gives you a copy that's cryptographically yours. It doesn't replace your hospital's portal — it gives you a sovereign backup that travels with you across every provider, every insurer, every state you ever live in.`,
+    tag: 'Comparison',
+  },
+  {
+    q: 'Who can actually see my records?',
+    a: `Only someone you've explicitly granted access to. Not the IPFS nodes storing your file. Not your insurance company. Not anyone else.\n\nWhen you upload a file, it's encrypted in your browser with a key tied to your Vewr account via Privy's MPC infrastructure. The key is never stored whole in one place — not on our servers, not on IPFS. We can't read your data even if we wanted to — or were compelled to.`,
+    tag: 'Privacy',
+  },
+  {
+    q: 'What file types can I upload?',
+    a: `Currently: PDF, PNG, JPG, and JPEG. These cover the vast majority of medical documents — lab results, imaging reports, prescriptions, vaccination records, and insurance documents.\n\nSupport for DICOM (raw medical imaging), HL7, and FHIR formats is on the roadmap for the provider-facing version.`,
+    tag: 'Files',
+  },
+];
+
+function FaqItem({ faq, index, T, AMBER, ROSE }) {
+  const [open, setOpen] = React.useState(false);
+  const accent = [T, AMBER, ROSE][index % 3];
+  return (
+    <div
+      style={{
+        borderBottom: '1px solid #e8ecf0',
+        transition: 'all 0.2s',
+      }}
+    >
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          width: '100%', background: 'none', border: 'none',
+          padding: '24px 0', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: '16px', textAlign: 'left',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+          <span style={{
+            fontSize: '10px', fontWeight: '700', letterSpacing: '0.8px',
+            color: accent,
+            background: `${accent}12`,
+            border: `1px solid ${accent}25`,
+            padding: '3px 8px', borderRadius: '4px', whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            {faq.tag.toUpperCase()}
+          </span>
+          <span style={{ fontSize: '16px', fontWeight: '600', color: '#0a0f1a', lineHeight: '1.4' }}>
+            {faq.q}
+          </span>
+        </div>
+        <div style={{
+          width: '28px', height: '28px', borderRadius: '50%',
+          background: open ? accent : '#f1f5f9',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0, transition: 'all 0.2s',
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+            stroke={open ? 'white' : '#64748b'} strokeWidth="2.5"
+            style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
+      </button>
+      {open && (
+        <div style={{ paddingBottom: '24px', paddingLeft: '0' }}>
+          {faq.a.split('\n\n').map((para, i) => (
+            <p key={i} style={{
+              fontSize: '15px', color: '#4a5568', lineHeight: '1.75',
+              margin: i === 0 ? '0 0 14px 0' : '14px 0 0 0', maxWidth: '680px',
+            }}>
+              {para}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FaqSection({ T, AMBER, ROSE }) {
+  return (
+    <section style={{ padding: '120px 40px', background: '#f8fafc' }}>
+      <div style={{ maxWidth: '1080px', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '80px', alignItems: 'start' }}>
+        <div style={{ position: 'sticky', top: '80px' }}>
+          <p style={{ color: AMBER, fontSize: '12px', fontWeight: '700', letterSpacing: '2px', margin: '0 0 12px 0' }}>
+            FAQ
+          </p>
+          <h2 style={{
+            fontSize: 'clamp(26px, 3vw, 38px)', fontWeight: '800',
+            letterSpacing: '-1px', margin: '0 0 16px 0', color: '#0a0f1a', lineHeight: '1.15',
+          }}>
+            The questions you should be asking.
+          </h2>
+          <p style={{ fontSize: '15px', color: '#64748b', lineHeight: '1.7', margin: 0 }}>
+            We'd rather answer the hard ones upfront than bury them in a terms of service.
+          </p>
+        </div>
+        <div>
+          {FAQS.map((faq, i) => (
+            <FaqItem key={faq.q} faq={faq} index={i} T={T} AMBER={AMBER} ROSE={ROSE} />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function LandingPage() {
   const [email, setEmail] = useState('');
   const [submitState, setSubmitState] = useState('idle');
@@ -66,125 +194,244 @@ function LandingPage() {
       {/* ── HERO ── */}
       <section style={{
         minHeight: '100vh', background: '#060b14',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        padding: '120px 24px 80px',
-        position: 'relative', overflow: 'hidden', textAlign: 'center',
+        display: 'flex', flexDirection: 'column', justifyContent: 'center',
+        padding: '100px 40px 80px',
+        position: 'relative', overflow: 'hidden',
       }}>
-        {/* glow orbs */}
+        {/* dot grid background */}
         <div style={{
-          position: 'absolute', top: '15%', left: '50%', transform: 'translateX(-50%)',
-          width: '600px', height: '600px', borderRadius: '50%',
-          background: `radial-gradient(circle, ${ROSE}15 0%, transparent 70%)`,
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          backgroundImage: 'radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px)',
+          backgroundSize: '32px 32px',
+          maskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%)',
+          WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%)',
+        }} />
+        {/* teal glow left */}
+        <div style={{
+          position: 'absolute', top: '20%', left: '-5%',
+          width: '500px', height: '500px', borderRadius: '50%',
+          background: `radial-gradient(circle, ${T}18 0%, transparent 65%)`,
           pointerEvents: 'none',
         }} />
+        {/* rose glow right */}
         <div style={{
-          position: 'absolute', bottom: '10%', right: '10%',
-          width: '300px', height: '300px', borderRadius: '50%',
-          background: `radial-gradient(circle, ${AMBER}14 0%, transparent 70%)`,
+          position: 'absolute', bottom: '15%', right: '-5%',
+          width: '400px', height: '400px', borderRadius: '50%',
+          background: `radial-gradient(circle, ${ROSE}14 0%, transparent 65%)`,
           pointerEvents: 'none',
         }} />
 
-        <h1 style={{
-          fontSize: 'clamp(32px, 5vw, 64px)', fontWeight: '800',
-          lineHeight: '1.12', letterSpacing: '-2px',
-          color: 'white', margin: '0 0 28px 0',
-          maxWidth: '860px', position: 'relative',
+        {/* two-column layout */}
+        <div style={{
+          maxWidth: '1080px', margin: '0 auto', width: '100%',
+          display: 'grid', gridTemplateColumns: '1fr 1fr',
+          gap: '64px', alignItems: 'center', position: 'relative',
         }}>
-          Every year, over 133 million Americans have their health records exposed.{' '}
-          <span style={{
-            background: `linear-gradient(90deg, ${ROSE}, #d4547a)`,
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-          }}>
-            Not hacked — just bought, sold, and shared without their knowledge.
-          </span>
-        </h1>
-
-        <p style={{
-          fontSize: '18px', color: 'rgba(255,255,255,0.55)',
-          maxWidth: '520px', lineHeight: '1.75', margin: '0 0 52px 0',
-          position: 'relative',
-        }}>
-          Vewr gives your health data back to you — encrypted in your browser
-          before it ever touches a server, stored on IPFS, under your control alone.
-        </p>
-
-        {/* Waitlist form */}
-        <div style={{ position: 'relative', width: '100%', maxWidth: '480px' }}>
-          {submitState === 'success' ? (
+          {/* LEFT: copy + form */}
+          <div>
+            {/* badge */}
             <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-              background: `${T}15`, border: `1px solid ${T}40`,
-              padding: '16px 24px', borderRadius: '14px',
-              color: T, fontSize: '15px', fontWeight: '500',
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+              background: `${T}12`, border: `1px solid ${T}30`,
+              color: T, padding: '6px 14px', borderRadius: '100px',
+              fontSize: '11px', fontWeight: '700', letterSpacing: '1px',
+              marginBottom: '28px',
             }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2.5">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              You're on the list — we'll be in touch.
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: T, boxShadow: `0 0 8px ${T}` }} />
+              PATIENT-CONTROLLED HEALTH DATA
             </div>
-          ) : (
-            <form onSubmit={handleWaitlist} style={{
-              display: 'flex', background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: '14px', padding: '6px', gap: '6px',
-            }}>
-              <input
-                type="email" required
-                placeholder="Enter your email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                style={{
-                  flex: 1, background: 'transparent', border: 'none', outline: 'none',
-                  padding: '10px 14px', fontSize: '14px',
-                  color: 'white', minWidth: 0,
-                }}
-              />
-              <button type="submit" disabled={submitState === 'loading'} style={{
-                padding: '10px 22px', background: T,
-                color: 'white', border: 'none', borderRadius: '9px',
-                cursor: 'pointer', fontSize: '14px', fontWeight: '600',
-                whiteSpace: 'nowrap', opacity: submitState === 'loading' ? 0.7 : 1,
-                flexShrink: 0,
-              }}>
-                {submitState === 'loading' ? 'Joining...' : 'Join Waitlist'}
-              </button>
-            </form>
-          )}
-          {submitState === 'error' && (
-            <p style={{ color: '#fc8181', fontSize: '13px', marginTop: '8px' }}>
-              Something went wrong — try again.
-            </p>
-          )}
-          <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '12px', marginTop: '14px' }}>
-            No spam. Early access only.
-          </p>
-        </div>
 
-        {/* trust strip */}
-        <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0,
-          borderTop: '1px solid rgba(255,255,255,0.06)',
-          padding: '18px 40px',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
-          flexWrap: 'wrap',
-        }}>
-          {[
-            { label: 'Browser-only encryption', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> },
-            { label: 'You hold the keys', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg> },
-            { label: 'Stored on IPFS', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg> },
-            { label: 'Zero-knowledge', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg> },
-          ].map(({ label, icon }) => (
-            <div key={label} style={{
-              display: 'flex', alignItems: 'center', gap: '7px',
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.09)',
-              borderRadius: '100px', padding: '6px 13px',
-              color: 'rgba(255,255,255,0.45)', fontSize: '12px', fontWeight: '500',
+            <h1 style={{
+              fontSize: 'clamp(32px, 4vw, 54px)', fontWeight: '800',
+              lineHeight: '1.1', letterSpacing: '-2px',
+              color: 'white', margin: '0 0 12px 0',
             }}>
-              {icon}
-              {label}
+              Your health data
+              <br />is bought and sold
+              <br />
+              <span style={{
+                background: `linear-gradient(90deg, ${T}, #4dd9d5)`,
+                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+              }}>
+                without you.
+              </span>
+            </h1>
+
+            <p style={{
+              fontSize: '16px', color: 'rgba(255,255,255,0.5)',
+              lineHeight: '1.75', margin: '0 0 36px 0', maxWidth: '420px',
+            }}>
+              133 million Americans have their records exposed every year — not from hacks,
+              from the system working as designed. Vewr gives it back.{' '}
+              <a
+                href="https://ocrportal.hhs.gov/ocr/breach/breach_report.jsf"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  color: 'rgba(255,255,255,0.25)',
+                  fontSize: '11px',
+                  verticalAlign: 'super',
+                  textDecoration: 'none',
+                  borderBottom: '1px solid rgba(255,255,255,0.15)',
+                  lineHeight: 1,
+                }}
+                title="Source: HHS Office for Civil Rights, HIPAA Breach Reporting Tool (2023)"
+              >
+                HHS OCR
+              </a>
+            </p>
+
+            {submitState === 'success' ? (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: '10px',
+                background: `${T}15`, border: `1px solid ${T}40`,
+                padding: '14px 20px', borderRadius: '12px',
+                color: T, fontSize: '14px', fontWeight: '500',
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                You're on the list — we'll be in touch.
+              </div>
+            ) : (
+              <div>
+                <form onSubmit={handleWaitlist} style={{
+                  display: 'flex', background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: '12px', padding: '5px', gap: '6px', maxWidth: '400px',
+                }}>
+                  <input
+                    type="email" required
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    style={{
+                      flex: 1, background: 'transparent', border: 'none', outline: 'none',
+                      padding: '10px 14px', fontSize: '14px', color: 'white', minWidth: 0,
+                    }}
+                  />
+                  <button type="submit" disabled={submitState === 'loading'} style={{
+                    padding: '10px 20px', background: T, color: 'white',
+                    border: 'none', borderRadius: '8px', cursor: 'pointer',
+                    fontSize: '13px', fontWeight: '700', whiteSpace: 'nowrap',
+                    opacity: submitState === 'loading' ? 0.7 : 1, flexShrink: 0,
+                  }}>
+                    {submitState === 'loading' ? 'Joining...' : 'Join Waitlist'}
+                  </button>
+                </form>
+                {submitState === 'error' && (
+                  <p style={{ color: '#fc8181', fontSize: '13px', marginTop: '8px' }}>Something went wrong — try again.</p>
+                )}
+                <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '12px', marginTop: '12px' }}>No spam. Early access only.</p>
+              </div>
+            )}
+
+            {/* trust pills */}
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '32px' }}>
+              {[
+                { label: 'Sign in with email', icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> },
+                { label: 'Browser-encrypted', icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> },
+                { label: 'No crypto wallet needed', icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg> },
+              ].map(({ label, icon }) => (
+                <div key={label} style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: '100px', padding: '5px 11px',
+                  color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '500',
+                }}>
+                  {icon}{label}
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+
+          {/* RIGHT: vault mockup */}
+          <div style={{ position: 'relative' }}>
+            {/* glow behind card */}
+            <div style={{
+              position: 'absolute', top: '50%', left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '300px', height: '300px', borderRadius: '50%',
+              background: `radial-gradient(circle, ${T}20 0%, transparent 70%)`,
+              pointerEvents: 'none',
+            }} />
+            <div style={{
+              background: '#0d1117', borderRadius: '20px', padding: '24px',
+              border: '1px solid rgba(255,255,255,0.08)',
+              boxShadow: `0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)`,
+              position: 'relative',
+            }}>
+              {/* vault header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '34px', height: '34px', borderRadius: '9px',
+                    background: `${T}20`, border: `1px solid ${T}30`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>Your Health Vault</div>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)' }}>End-to-end encrypted</div>
+                  </div>
+                </div>
+                <div style={{
+                  background: `${T}18`, color: T, border: `1px solid ${T}30`,
+                  padding: '3px 9px', borderRadius: '6px', fontSize: '11px', fontWeight: '600',
+                }}>
+                  🔒 Locked
+                </div>
+              </div>
+
+              <div style={{ fontSize: '10px', fontWeight: '700', color: 'rgba(255,255,255,0.25)', letterSpacing: '1px', marginBottom: '10px' }}>
+                YOUR RECORDS
+              </div>
+
+              {[
+                { name: 'Blood Panel — Jan 2025', type: 'PDF', color: T },
+                { name: 'MRI Scan — Dec 2024', type: 'IMG', color: AMBER },
+                { name: 'Vaccination Record', type: 'PDF', color: T },
+                { name: 'Prescription — Nov 2024', type: 'PDF', color: AMBER },
+              ].map((r, i) => (
+                <div key={r.name} style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '10px 12px', borderRadius: '9px',
+                  background: i % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'transparent',
+                  border: '1px solid rgba(255,255,255,0.05)',
+                  marginBottom: '6px',
+                }}>
+                  <div style={{
+                    width: '28px', height: '28px', borderRadius: '7px',
+                    background: `${r.color}18`, border: `1px solid ${r.color}25`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={r.color} strokeWidth="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '12px', fontWeight: '500', color: 'rgba(255,255,255,0.8)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+                  </div>
+                  <span style={{ fontSize: '9px', fontWeight: '700', color: 'rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '3px' }}>{r.type}</span>
+                </div>
+              ))}
+
+              <div style={{
+                marginTop: '16px', padding: '12px',
+                background: `${T}08`, border: `1px solid ${T}20`,
+                borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px',
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', lineHeight: '1.4' }}>
+                  Only you can decrypt these files. Not even Vewr can read them.
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -239,7 +486,7 @@ function LandingPage() {
 
             {[
               {
-                n: '01', title: 'Upload', desc: 'Select any medical file — labs, scans, prescriptions — directly from your device.',
+                n: '01', title: 'Upload', desc: 'Sign in with your email — no crypto wallet or seed phrase needed. Then select any medical file from your device.',
                 icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               },
               {
@@ -280,6 +527,79 @@ function LandingPage() {
         </div>
       </section>
 
+      {/* ── FOR YOU ── */}
+      <section style={{ padding: '120px 40px', background: '#ffffff' }}>
+        <div style={{ maxWidth: '1080px', margin: '0 auto' }}>
+          <div style={{ marginBottom: '64px' }}>
+            <p style={{ color: T, fontSize: '12px', fontWeight: '700', letterSpacing: '2px', margin: '0 0 12px 0' }}>
+              FOR YOU
+            </p>
+            <h2 style={{
+              fontSize: 'clamp(28px, 4vw, 46px)', fontWeight: '800',
+              letterSpacing: '-1.5px', margin: '0 0 16px 0', color: '#0a0f1a', lineHeight: '1.1',
+            }}>
+              Your records, finally<br />
+              <span style={{ color: '#94a3b8' }}>working for you.</span>
+            </h2>
+            <p style={{ fontSize: '17px', color: '#64748b', margin: 0, maxWidth: '520px', lineHeight: '1.7' }}>
+              Not for your insurer. Not for your hospital's IT department. Not for data brokers.
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+            {[
+              {
+                icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
+                title: 'Everything in one place',
+                desc: 'Five hospitals. Three apps. A filing cabinet. Vewr pulls it all into a single encrypted vault that\'s actually yours.',
+                accent: T,
+              },
+              {
+                icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+                title: 'Only you can read it',
+                desc: 'Encrypted in your browser before it ever leaves your device. Not your hospital\'s IT team. Not your insurer. Not a data broker. Yours.',
+                accent: T,
+              },
+              {
+                icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={AMBER} strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+                title: 'Share on your terms',
+                desc: 'Give a new specialist exactly what they need — and nothing else. Revoke it the moment you\'re done.',
+                accent: AMBER,
+              },
+              {
+                icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={AMBER} strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+                title: 'Yours forever',
+                desc: 'Switch insurers. Change doctors. Move across the country. Your records travel with you, not with your last provider.',
+                accent: AMBER,
+              },
+            ].map(({ icon, title, desc, accent }) => (
+              <div key={title} style={{
+                padding: '32px',
+                border: '1px solid #e8ecf0',
+                borderRadius: '16px',
+                background: '#fafbfc',
+                borderTop: `3px solid ${accent}`,
+              }}>
+                <div style={{
+                  width: '48px', height: '48px', borderRadius: '12px',
+                  background: `${accent}10`, border: `1px solid ${accent}20`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  marginBottom: '20px',
+                }}>
+                  {icon}
+                </div>
+                <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#0a0f1a', margin: '0 0 10px 0', letterSpacing: '-0.3px' }}>
+                  {title}
+                </h3>
+                <p style={{ fontSize: '15px', color: '#64748b', margin: 0, lineHeight: '1.65' }}>
+                  {desc}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── FOR PROVIDERS ── */}
       <section style={{ padding: '120px 40px', background: '#f8fafc' }}>
         <div style={{ maxWidth: '1080px', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '80px', alignItems: 'center' }}>
@@ -294,7 +614,7 @@ function LandingPage() {
               Records patients<br />actually trust you with.
             </h2>
             <p style={{ fontSize: '16px', color: '#64748b', lineHeight: '1.75', margin: '0 0 36px 0' }}>
-              Patients share records via their wallet — cryptographically, not through a fax or broken portal.
+              Patients share access through Vewr — cryptographically verified, not through a fax or a broken portal.
               You get exactly what they choose to share, and they can take it back at any time.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -408,6 +728,9 @@ function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* ── FAQ ── */}
+      <FaqSection T={T} AMBER={AMBER} ROSE={ROSE} />
 
       {/* ── FOOTER CTA ── */}
       <section style={{

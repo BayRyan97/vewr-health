@@ -1,359 +1,334 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { encryptFile } from '../lib/webCryptoEncryption';
 
-function UploadRecord() {
+const T = '#00A19C';
+const T_DARK = '#007F7B';
+const FONT = '"Gotham SSm A", "Gotham SSm B", system-ui, -apple-system, sans-serif';
+
+function UploadRecord({ onUploadSuccess }) {
   const [file, setFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [encrypting, setEncrypting] = useState(false);
+  const [stage, setStage] = useState('idle'); // idle | encrypting | uploading | done | error
   const [cid, setCid] = useState(null);
-  const [encryptionMetadata, setEncryptionMetadata] = useState(null);
-  const [error, setError] = useState(null);
-  const [uploadedRecords, setUploadedRecords] = useState([]);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef(null);
 
-  // For now, use a placeholder wallet address
-  // TODO: Replace with actual user wallet from Privy
-  const walletAddress = '0x0000000000000000000000000000000000000000';
+  const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
 
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile) {
-      // Validate file type
-      const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
-      if (validTypes.includes(selectedFile.type)) {
-        setFile(selectedFile);
-        setError(null);
-      } else {
-        setError('Please select a PDF or image file (PNG, JPG, JPEG)');
-        setFile(null);
-      }
-    }
-  };
-
-  const uploadToIPFS = async () => {
-    if (!file) {
-      setError('Please select a file first');
+  const handleFile = (f) => {
+    if (!f) return;
+    if (!validTypes.includes(f.type)) {
+      setErrorMsg('Please select a PDF or image file (PNG, JPG, JPEG)');
+      setFile(null);
       return;
     }
+    setFile(f);
+    setErrorMsg('');
+    setStage('idle');
+    setCid(null);
+  };
+
+  const handleFileChange = (e) => handleFile(e.target.files[0]);
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    handleFile(e.dataTransfer.files[0]);
+  };
+
+  const handleUpload = async () => {
+    if (!file) return;
 
     const jwt = process.env.REACT_APP_PINATA_JWT;
     if (!jwt) {
-      setError('Pinata JWT not found. Please check your .env file');
+      setErrorMsg('Pinata JWT not configured. Check your .env file.');
       return;
     }
 
-    setError(null);
+    setErrorMsg('');
     setCid(null);
-    setEncryptionMetadata(null);
 
     try {
-      // Step 1: Encrypt the file with Web Crypto API
-      setEncrypting(true);
-      console.log('🔐 Encrypting file with Web Crypto API (AES-256-GCM)...');
-      
-      const { encryptedFile, metadata } = await encryptFile(file, walletAddress);
-      
-      console.log('✅ File encrypted successfully');
-      console.log('📊 Original size:', file.size, 'bytes');
-      console.log('📊 Encrypted size:', encryptedFile.size, 'bytes');
-      console.log('📊 Metadata:', metadata);
-      setEncrypting(false);
+      setStage('encrypting');
+      const { encryptedFile, metadata } = await encryptFile(file, 'vewr-user');
 
-      // Step 2: Upload encrypted file to IPFS
-      setUploading(true);
-      console.log('📤 Uploading encrypted file to IPFS...');
-      console.log('JWT available:', jwt ? 'Yes' : 'No');
-
+      setStage('uploading');
       const formData = new FormData();
       formData.append('file', encryptedFile);
 
-      // Use Pinata v2 pinning API (has CORS support for localhost)
       const response = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${jwt}`,
-        },
+        headers: { Authorization: `Bearer ${jwt}` },
         body: formData,
       });
 
-      console.log('Response status:', response.status);
-      
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Upload failed:', errorText);
-        throw new Error(`Upload failed (${response.status}): ${errorText}`);
+        const text = await response.text();
+        throw new Error(`Upload failed (${response.status}): ${text}`);
       }
 
       const data = await response.json();
-      console.log('Upload response:', data);
-      
-      // Pinata v2 returns CID in IpfsHash
       const uploadedCid = data.IpfsHash;
-      
-      if (!uploadedCid) {
-        throw new Error('No CID returned from Pinata');
-      }
+      if (!uploadedCid) throw new Error('No CID returned from Pinata');
 
-      console.log('✅ Encrypted file uploaded to IPFS');
-      console.log('CID:', uploadedCid);
-
-      // Create full metadata with CID
-      const fullMetadata = {
-        ...metadata,
-        ipfsCid: uploadedCid,
-      };
-
+      const fullMetadata = { ...metadata, ipfsCid: uploadedCid };
       setCid(uploadedCid);
-      setEncryptionMetadata(fullMetadata);
+      setStage('done');
 
-      // Store in local state (will be replaced with database later)
-      const newRecord = {
+      const record = {
         id: Date.now(),
         cid: uploadedCid,
         metadata: fullMetadata,
         uploadedAt: new Date().toISOString(),
       };
-      
-      setUploadedRecords(prev => [newRecord, ...prev]);
-      
-      console.log('📝 Record stored locally:', newRecord);
-      console.log('💾 All records:', uploadedRecords.length + 1);
+
+      if (typeof onUploadSuccess === 'function') onUploadSuccess(record);
 
     } catch (err) {
-      setError(err.message || 'Failed to encrypt and upload file');
-      console.error('Upload error:', err);
-    } finally {
-      setEncrypting(false);
-      setUploading(false);
+      setErrorMsg(err.message || 'Upload failed. Please try again.');
+      setStage('error');
     }
   };
 
+  const reset = () => {
+    setFile(null);
+    setStage('idle');
+    setCid(null);
+    setErrorMsg('');
+    if (inputRef.current) inputRef.current.value = '';
+  };
+
+  const busy = stage === 'encrypting' || stage === 'uploading';
+
   return (
-    <div style={{ 
-      background: 'white',
-      borderRadius: '12px',
-      padding: '32px',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-      border: '1px solid #e9ecef'
-    }}>
-      <div style={{ marginBottom: '28px' }}>
-        <h2 style={{
-          color: '#212529',
-          fontSize: '20px',
-          marginTop: 0,
-          marginBottom: '4px',
-          fontWeight: '600',
-          letterSpacing: '-0.3px'
-        }}>
-          Upload New Record
-        </h2>
-        <p style={{
-          color: '#6c757d',
-          fontSize: '14px',
-          marginTop: 0,
-          marginBottom: 0,
-          lineHeight: '1.5'
-        }}>
-          Files are encrypted in your browser with AES-256-GCM before upload
-        </p>
-      </div>
-      
-      <div style={{ marginBottom: '24px' }}>
-        <label 
-          htmlFor="file-upload"
+    <div style={{ fontFamily: FONT }}>
+      <div style={{
+        background: 'white', borderRadius: '16px',
+        border: '1px solid #e5e7eb', padding: '36px',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+      }}>
+        {/* Header */}
+        <div style={{ marginBottom: '28px' }}>
+          <h2 style={{
+            color: '#111827', fontSize: '19px', fontWeight: '700',
+            margin: '0 0 6px 0', letterSpacing: '-0.3px',
+          }}>
+            Upload a Record
+          </h2>
+          <p style={{ color: '#6b7280', fontSize: '14px', margin: 0, lineHeight: '1.6' }}>
+            Your file is encrypted with AES-256-GCM in your browser before it ever leaves your device.
+          </p>
+        </div>
+
+        {/* Drop zone */}
+        <div
+          onClick={() => !busy && inputRef.current?.click()}
+          onDragOver={e => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={handleDrop}
           style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '48px 24px',
-            border: '2px dashed #dee2e6',
-            borderRadius: '8px',
-            cursor: uploading || encrypting ? 'not-allowed' : 'pointer',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', padding: '52px 24px',
+            border: `2px dashed ${dragging ? T : file ? T + '60' : '#d1d5db'}`,
+            borderRadius: '12px', cursor: busy ? 'default' : 'pointer',
+            background: dragging ? `${T}08` : file ? '#f0fdfb' : '#fafafa',
             transition: 'all 0.2s',
-            background: file ? '#f8f9fa' : 'transparent',
-            opacity: uploading || encrypting ? 0.6 : 1
-          }}
-          onMouseEnter={(e) => {
-            if (!uploading && !encrypting) {
-              e.currentTarget.style.borderColor = '#0085ff';
-              e.currentTarget.style.background = '#f8f9ff';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!uploading && !encrypting) {
-              e.currentTarget.style.borderColor = '#dee2e6';
-              e.currentTarget.style.background = file ? '#f8f9fa' : 'transparent';
-            }
+            opacity: busy ? 0.7 : 1,
           }}
         >
           {!file ? (
             <>
               <div style={{
-                width: '56px',
-                height: '56px',
-                borderRadius: '50%',
-                background: '#e3f2fd',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: '16px'
+                width: '56px', height: '56px', borderRadius: '14px',
+                background: '#f0fdfb', border: `1px solid ${T}30`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: '16px',
               }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0085ff" strokeWidth="2">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2" strokeLinecap="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                   <polyline points="17 8 12 3 7 8" />
                   <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
               </div>
-              <p style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: '500', color: '#212529' }}>
-                Click to upload file
+              <p style={{ margin: '0 0 6px 0', fontSize: '15px', fontWeight: '600', color: '#111827' }}>
+                {dragging ? 'Drop it here' : 'Click or drag to upload'}
               </p>
-              <p style={{ margin: 0, fontSize: '13px', color: '#6c757d' }}>
+              <p style={{ margin: 0, fontSize: '13px', color: '#9ca3af' }}>
                 PDF, PNG, JPG, or JPEG
               </p>
             </>
           ) : (
             <>
               <div style={{
-                width: '56px',
-                height: '56px',
-                borderRadius: '50%',
-                background: '#d4edda',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: '16px'
+                width: '56px', height: '56px', borderRadius: '14px',
+                background: '#f0fdfb', border: `1px solid ${T}50`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: '16px',
               }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#28a745" strokeWidth="2">
-                  <polyline points="20 6 9 17 4 12" />
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
                 </svg>
               </div>
-              <p style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: '500', color: '#212529' }}>
+              <p style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: '600', color: '#111827' }}>
                 {file.name}
               </p>
-              <p style={{ margin: 0, fontSize: '13px', color: '#6c757d' }}>
-                {(file.size / 1024).toFixed(2)} KB • Click to change
+              <p style={{ margin: 0, fontSize: '13px', color: '#9ca3af' }}>
+                {(file.size / 1024).toFixed(1)} KB
+                {!busy && <span style={{ color: T, marginLeft: '8px', cursor: 'pointer' }} onClick={e => { e.stopPropagation(); reset(); }}>× Remove</span>}
               </p>
             </>
           )}
-        </label>
+        </div>
         <input
-          id="file-upload"
+          ref={inputRef}
           type="file"
           accept=".pdf,.png,.jpg,.jpeg"
           onChange={handleFileChange}
-          disabled={uploading || encrypting}
+          disabled={busy}
           style={{ display: 'none' }}
         />
+
+        {/* Progress steps */}
+        {busy && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0',
+            margin: '20px 0 0 0',
+          }}>
+            {[
+              { id: 'encrypting', label: 'Encrypting' },
+              { id: 'uploading', label: 'Uploading' },
+            ].map((step, i) => {
+              const active = stage === step.id;
+              const done = stage === 'uploading' && step.id === 'encrypting';
+              return (
+                <React.Fragment key={step.id}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{
+                      width: '24px', height: '24px', borderRadius: '50%',
+                      background: done ? T : active ? `${T}20` : '#e5e7eb',
+                      border: `2px solid ${done || active ? T : '#e5e7eb'}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'all 0.3s',
+                    }}>
+                      {done ? (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      ) : active ? (
+                        <div style={{
+                          width: '8px', height: '8px', borderRadius: '50%',
+                          background: T, animation: 'pulse 1s ease-in-out infinite',
+                        }} />
+                      ) : null}
+                    </div>
+                    <span style={{ fontSize: '13px', fontWeight: active ? '600' : '400', color: active ? '#111827' : '#9ca3af' }}>
+                      {step.label}
+                    </span>
+                  </div>
+                  {i < 1 && (
+                    <div style={{ flex: 1, height: '2px', background: done ? T : '#e5e7eb', margin: '0 12px', transition: 'background 0.3s' }} />
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Upload button */}
+        {stage !== 'done' && (
+          <button
+            onClick={handleUpload}
+            disabled={!file || busy}
+            style={{
+              width: '100%', marginTop: '20px', padding: '15px 24px',
+              background: !file || busy ? '#f3f4f6' : T,
+              color: !file || busy ? '#9ca3af' : 'white',
+              border: 'none', borderRadius: '10px',
+              fontSize: '15px', fontWeight: '600', cursor: !file || busy ? 'not-allowed' : 'pointer',
+              fontFamily: FONT, transition: 'background 0.2s',
+              boxShadow: file && !busy ? `0 4px 14px ${T}40` : 'none',
+            }}
+            onMouseEnter={e => { if (file && !busy) e.currentTarget.style.background = T_DARK; }}
+            onMouseLeave={e => { if (file && !busy) e.currentTarget.style.background = T; }}
+          >
+            {stage === 'encrypting' ? 'Encrypting your file…'
+              : stage === 'uploading' ? 'Uploading to secure storage…'
+              : '🔒 Encrypt & Store Securely'}
+          </button>
+        )}
+
+        {/* Error */}
+        {errorMsg && (
+          <div style={{
+            marginTop: '16px', padding: '14px 16px',
+            background: '#fef2f2', border: '1px solid #fecaca',
+            borderRadius: '10px', fontSize: '14px', color: '#dc2626', lineHeight: '1.5',
+          }}>
+            {errorMsg}
+          </div>
+        )}
+
+        {/* Success */}
+        {stage === 'done' && cid && (
+          <div style={{
+            marginTop: '20px', padding: '24px',
+            background: '#f0fdfb', border: `1px solid ${T}30`,
+            borderRadius: '12px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <div style={{
+                width: '32px', height: '32px', borderRadius: '8px',
+                background: T, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+              <div>
+                <div style={{ fontWeight: '700', color: '#111827', fontSize: '15px' }}>Stored securely</div>
+                <div style={{ fontSize: '13px', color: '#6b7280' }}>Encrypted & pinned to IPFS</div>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Content ID (CID)
+              </div>
+              <div style={{
+                padding: '10px 14px', background: 'white',
+                borderRadius: '8px', fontSize: '12px',
+                fontFamily: 'monospace', wordBreak: 'break-all',
+                color: '#374151', border: `1px solid ${T}20`,
+              }}>
+                {cid}
+              </div>
+            </div>
+
+            <button
+              onClick={reset}
+              style={{
+                width: '100%', padding: '11px 24px',
+                background: 'white', color: T,
+                border: `1px solid ${T}40`, borderRadius: '8px',
+                fontSize: '14px', fontWeight: '600', cursor: 'pointer',
+                fontFamily: FONT,
+              }}
+            >
+              Upload another file
+            </button>
+          </div>
+        )}
       </div>
 
-      <button
-        onClick={uploadToIPFS}
-        disabled={!file || uploading || encrypting}
-        style={{
-          width: '100%',
-          padding: '14px 24px',
-          backgroundColor: uploading || encrypting || !file ? '#e9ecef' : '#0085ff',
-          color: uploading || encrypting || !file ? '#6c757d' : 'white',
-          border: 'none',
-          borderRadius: '8px',
-          cursor: uploading || encrypting || !file ? 'not-allowed' : 'pointer',
-          fontSize: '15px',
-          fontWeight: '600',
-          transition: 'all 0.2s',
-          letterSpacing: '0.3px'
-        }}>
-        {encrypting ? '🔐 Encrypting...' : uploading ? '📤 Uploading...' : '🔒 Encrypt & Upload to IPFS'}
-      </button>
-
-      {error && (
-        <div style={{ 
-          marginTop: '16px', 
-          padding: '14px 16px',
-          backgroundColor: '#f8d7da',
-          border: '1px solid #f5c2c7',
-          borderRadius: '8px',
-          fontSize: '14px',
-          color: '#842029',
-          lineHeight: '1.5'
-        }}>
-          {error}
-        </div>
-      )}
-
-      {cid && encryptionMetadata && (
-        <div style={{ 
-          marginTop: '24px',
-          padding: '20px',
-          backgroundColor: '#d4edda',
-          border: '1px solid #c3e6cb',
-          borderRadius: '8px'
-        }}>
-          <div style={{ marginBottom: '12px' }}>
-            <div style={{ 
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              background: '#28a745',
-              color: 'white',
-              padding: '4px 12px',
-              borderRadius: '4px',
-              fontSize: '13px',
-              fontWeight: '600'
-            }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              {encryptionMetadata.encrypted ? 'Encrypted & Uploaded' : 'Uploaded'}
-            </div>
-          </div>
-          
-          {encryptionMetadata.encrypted && (
-            <div style={{ 
-              padding: '12px',
-              backgroundColor: '#fff',
-              borderRadius: '6px',
-              marginBottom: '12px',
-              border: '1px solid #c3e6cb'
-            }}>
-              <div style={{ fontSize: '13px', color: '#155724', fontWeight: '500', marginBottom: '4px' }}>
-                🔐 End-to-End Encrypted (AES-256-GCM)
-              </div>
-              <div style={{ fontSize: '12px', color: '#155724', lineHeight: '1.5' }}>
-                Your file was encrypted in your browser with Web Crypto API before upload. Only you can decrypt it.
-              </div>
-            </div>
-          )}
-          
-          <div style={{ marginTop: '12px' }}>
-            <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#155724', fontWeight: '500' }}>
-              IPFS CID:
-            </p>
-            <div style={{ 
-              padding: '12px',
-              backgroundColor: 'white',
-              borderRadius: '6px',
-              fontSize: '13px',
-              fontFamily: 'monospace',
-              wordBreak: 'break-all',
-              color: '#212529',
-              border: '1px solid #c3e6cb'
-            }}>
-              {cid}
-            </div>
-          </div>
-          <p style={{ 
-            margin: '16px 0 0 0', 
-            fontSize: '13px', 
-            color: '#155724',
-            lineHeight: '1.6'
-          }}>
-            Save this CID to access your {encryptionMetadata.encrypted ? 'encrypted' : ''} file later.
-          </p>
-        </div>
-      )}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(0.8); }
+        }
+      `}</style>
     </div>
   );
 }
 
 export default UploadRecord;
-
