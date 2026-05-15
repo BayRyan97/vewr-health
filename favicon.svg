@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Rounded square background -->
+  <rect width="32" height="32" rx="7" fill="#00A19C"/>
+  <!-- Shield icon centered -->
+  <path d="M16 4L7 7.5V14c0 5.25 3.85 10.15 9 11.35C21.15 24.15 25 19.25 25 14V7.5L16 4z"
+        fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
