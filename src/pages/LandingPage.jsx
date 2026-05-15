@@ -839,9 +839,21 @@ function LandingPage() {
           </div>
           <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px' }}>Vewr Health</span>
         </div>
-        <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '12px', margin: 0 }}>
-          © {new Date().getFullYear()} Vewr Health · Your data, your keys.
-        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+          <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '12px', margin: 0 }}>
+            © {new Date().getFullYear()} Vewr Health · Your data, your keys.
+          </p>
+          <a href="/terms" style={{ color: 'rgba(255,255,255,0.25)', fontSize: '12px', textDecoration: 'none', transition: 'color 0.2s' }}
+            onMouseEnter={e => e.currentTarget.style.color = T}
+            onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.25)'}>
+            Terms of Service
+          </a>
+          <a href="/privacy" style={{ color: 'rgba(255,255,255,0.25)', fontSize: '12px', textDecoration: 'none', transition: 'color 0.2s' }}
+            onMouseEnter={e => e.currentTarget.style.color = T}
+            onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.25)'}>
+            Privacy Policy
+          </a>
+        </div>
       </footer>
 
     </div>
