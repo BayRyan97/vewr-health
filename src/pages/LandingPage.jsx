@@ -108,9 +108,9 @@ function FaqItem({ faq, index, T, AMBER, ROSE }) {
 
 function FaqSection({ T, AMBER, ROSE }) {
   return (
-    <section style={{ padding: '120px 40px', background: '#f8fafc' }}>
-      <div style={{ maxWidth: '1080px', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '80px', alignItems: 'start' }}>
-        <div style={{ position: 'sticky', top: '80px' }}>
+    <section className="vw-section" style={{ padding: '120px 40px', background: '#f8fafc' }}>
+      <div className="vw-faq-grid" style={{ maxWidth: '1080px', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '80px', alignItems: 'start' }}>
+        <div className="vw-faq-sticky" style={{ position: 'sticky', top: '80px' }}>
           <p style={{ color: AMBER, fontSize: '12px', fontWeight: '700', letterSpacing: '2px', margin: '0 0 12px 0' }}>
             FAQ
           </p>
@@ -159,9 +159,29 @@ function LandingPage() {
 
   return (
     <div style={{ fontFamily: '"Gotham SSm", "Gotham", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', margin: 0 }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .vw-nav { padding: 0 20px !important; }
+          .vw-hero-section { padding: 90px 20px 60px !important; }
+          .vw-hero-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
+          .vw-hero-vault { display: none !important; }
+          .vw-section { padding: 60px 20px !important; }
+          .vw-stats-grid { grid-template-columns: 1fr !important; border-radius: 12px !important; }
+          .vw-stats-grid > div { padding: 28px 24px !important; }
+          .vw-steps-grid { grid-template-columns: 1fr 1fr !important; gap: 32px !important; }
+          .vw-steps-line { display: none !important; }
+          .vw-steps-grid > div { padding: 0 !important; }
+          .vw-cards-grid { grid-template-columns: 1fr !important; }
+          .vw-providers-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
+          .vw-providers-card { display: none !important; }
+          .vw-faq-grid { grid-template-columns: 1fr !important; gap: 32px !important; }
+          .vw-faq-sticky { position: static !important; }
+          .vw-footer-cta { padding: 72px 20px !important; }
+        }
+      `}</style>
 
       {/* ── NAV ── */}
-      <nav style={{
+      <nav className="vw-nav" style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200,
         height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 40px',
@@ -192,7 +212,7 @@ function LandingPage() {
       </nav>
 
       {/* ── HERO ── */}
-      <section style={{
+      <section className="vw-hero-section" style={{
         minHeight: '100vh', background: '#060b14',
         display: 'flex', flexDirection: 'column', justifyContent: 'center',
         padding: '100px 40px 80px',
@@ -222,7 +242,7 @@ function LandingPage() {
         }} />
 
         {/* two-column layout */}
-        <div style={{
+        <div className="vw-hero-grid" style={{
           maxWidth: '1080px', margin: '0 auto', width: '100%',
           display: 'grid', gridTemplateColumns: '1fr 1fr',
           gap: '64px', alignItems: 'center', position: 'relative',
@@ -344,7 +364,7 @@ function LandingPage() {
           </div>
 
           {/* RIGHT: vault mockup */}
-          <div style={{ position: 'relative' }}>
+          <div className="vw-hero-vault" style={{ position: 'relative' }}>
             {/* glow behind card */}
             <div style={{
               position: 'absolute', top: '50%', left: '50%',
@@ -436,9 +456,9 @@ function LandingPage() {
       </section>
 
       {/* ── PROBLEM ── */}
-      <section style={{ padding: '80px 40px', background: '#0d1117' }}>
+      <section className="vw-section" style={{ padding: '80px 40px', background: '#0d1117' }}>
         <div style={{ maxWidth: '1080px', margin: '0 auto' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', background: 'rgba(255,255,255,0.06)', borderRadius: '16px', overflow: 'hidden' }}>
+          <div className="vw-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', background: 'rgba(255,255,255,0.06)', borderRadius: '16px', overflow: 'hidden' }}>
             {[
               { stat: '50+', label: 'companies profit from your medical data every year', color: ROSE },
               { stat: '0×', label: 'you were asked for permission', color: AMBER },
@@ -461,7 +481,7 @@ function LandingPage() {
       </section>
 
       {/* ── HOW IT WORKS ── */}
-      <section style={{ padding: '120px 40px', background: '#ffffff' }}>
+      <section className="vw-section" style={{ padding: '120px 40px', background: '#ffffff' }}>
         <div style={{ maxWidth: '1080px', margin: '0 auto' }}>
           <div style={{ marginBottom: '72px' }}>
             <p style={{ color: AMBER, fontSize: '12px', fontWeight: '700', letterSpacing: '2px', margin: '0 0 12px 0' }}>
@@ -476,9 +496,9 @@ function LandingPage() {
             </h2>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0', position: 'relative' }}>
+          <div className="vw-steps-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0', position: 'relative' }}>
             {/* connecting line */}
-            <div style={{
+            <div className="vw-steps-line" style={{
               position: 'absolute', top: '28px', left: 'calc(12.5%)', right: 'calc(12.5%)',
               height: '1px', background: 'linear-gradient(90deg, transparent, #e2e8f0 20%, #e2e8f0 80%, transparent)',
               zIndex: 0,
@@ -528,7 +548,7 @@ function LandingPage() {
       </section>
 
       {/* ── FOR YOU ── */}
-      <section style={{ padding: '120px 40px', background: '#ffffff' }}>
+      <section className="vw-section" style={{ padding: '120px 40px', background: '#ffffff' }}>
         <div style={{ maxWidth: '1080px', margin: '0 auto' }}>
           <div style={{ marginBottom: '64px' }}>
             <p style={{ color: T, fontSize: '12px', fontWeight: '700', letterSpacing: '2px', margin: '0 0 12px 0' }}>
@@ -546,7 +566,7 @@ function LandingPage() {
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+          <div className="vw-cards-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
             {[
               {
                 icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
@@ -601,8 +621,8 @@ function LandingPage() {
       </section>
 
       {/* ── FOR PROVIDERS ── */}
-      <section style={{ padding: '120px 40px', background: '#f8fafc' }}>
-        <div style={{ maxWidth: '1080px', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '80px', alignItems: 'center' }}>
+      <section className="vw-section" style={{ padding: '120px 40px', background: '#f8fafc' }}>
+        <div className="vw-providers-grid" style={{ maxWidth: '1080px', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '80px', alignItems: 'center' }}>
           <div>
             <p style={{ color: ROSE, fontSize: '12px', fontWeight: '700', letterSpacing: '2px', margin: '0 0 16px 0' }}>
               FOR HEALTHCARE PROVIDERS
@@ -641,7 +661,7 @@ function LandingPage() {
           </div>
 
           {/* Provider card */}
-          <div style={{
+          <div className="vw-providers-card" style={{
             background: '#0a0f1a', borderRadius: '20px', padding: '28px',
             border: '1px solid rgba(255,255,255,0.08)',
             boxShadow: '0 24px 64px rgba(0,0,0,0.25)',
@@ -733,7 +753,7 @@ function LandingPage() {
       <FaqSection T={T} AMBER={AMBER} ROSE={ROSE} />
 
       {/* ── FOOTER CTA ── */}
-      <section style={{
+      <section className="vw-footer-cta" style={{
         padding: '120px 40px', background: '#060b14',
         textAlign: 'center', position: 'relative', overflow: 'hidden',
       }}>

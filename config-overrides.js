@@ -40,7 +40,7 @@ module.exports = function override(config) {
     })
   ]);
   
-  config.ignoreWarnings = [/Failed to parse source map/];
+  config.ignoreWarnings = [/Failed to parse source map/, /Module build failed.*source-map-loader/];
   
   return config;
 }
