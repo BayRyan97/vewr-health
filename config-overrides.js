@@ -1,6 +1,16 @@
 const webpack = require('webpack');
+const path = require('path');
 
 module.exports = function override(config) {
+  // Stub out unused Farcaster/Solana peer deps pulled in by @privy-io/react-auth
+  config.resolve.alias = {
+    ...config.resolve.alias,
+    '@farcaster/mini-app-solana': path.resolve(__dirname, 'src/lib/empty-stub.js'),
+    '@solana/wallet-adapter-react': path.resolve(__dirname, 'src/lib/empty-stub.js'),
+    '@solana/wallet-adapter-base': path.resolve(__dirname, 'src/lib/empty-stub.js'),
+    '@solana/web3.js': path.resolve(__dirname, 'src/lib/empty-stub.js'),
+  };
+
   const fallback = config.resolve.fallback || {};
   Object.assign(fallback, {
     "crypto": require.resolve("crypto-browserify"),
