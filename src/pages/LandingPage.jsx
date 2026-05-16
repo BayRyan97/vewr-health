@@ -452,9 +452,9 @@ function LandingPage() {
         <div style={{ maxWidth: '1080px', margin: '0 auto' }}>
           <div className="vw-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', background: 'rgba(255,255,255,0.06)', borderRadius: '16px', overflow: 'hidden' }}>
             {[
-              { stat: '50+', label: 'companies profit from your medical data every year', color: ROSE },
-              { stat: '0×', label: 'you were asked for permission', color: AMBER },
-              { stat: '1', label: 'place your records should live — with you', color: T },
+              { stat: '133M', label: 'Americans had health records exposed last year', color: ROSE },
+              { stat: '0', label: 'times you were asked for permission', color: AMBER },
+              { stat: '1', label: 'place your records should actually live — with you', color: T },
             ].map(({ stat, label, color }) => (
               <div key={stat} style={{ padding: '40px 32px', background: '#0d1117' }}>
                 <div style={{
