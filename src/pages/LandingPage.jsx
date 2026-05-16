@@ -452,10 +452,10 @@ function LandingPage() {
         <div style={{ maxWidth: '1080px', margin: '0 auto' }}>
           <div className="vw-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', background: 'rgba(255,255,255,0.06)', borderRadius: '16px', overflow: 'hidden' }}>
             {[
-              { stat: '133M', label: 'Americans had health records exposed last year', color: ROSE },
+              { stat: '700+', label: 'companies legally buying and selling your medical data right now', color: ROSE, source: 'FTC', sourceUrl: 'https://www.ftc.gov/reports/commercial-surveillance' },
               { stat: '0', label: 'times you were asked for permission', color: AMBER },
               { stat: '1', label: 'person should decide who sees your health records — you', color: T },
-            ].map(({ stat, label, color }) => (
+            ].map(({ stat, label, color, source, sourceUrl }) => (
               <div key={stat} style={{ padding: '40px 32px', background: '#0d1117' }}>
                 <div style={{
                   fontSize: 'clamp(40px, 5vw, 64px)', fontWeight: '800',
@@ -465,6 +465,15 @@ function LandingPage() {
                 </div>
                 <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.4)', margin: 0, lineHeight: '1.6' }}>
                   {label}
+                  {source && (
+                    <a href={sourceUrl} target="_blank" rel="noopener noreferrer" style={{
+                      color: 'rgba(255,255,255,0.2)', fontSize: '11px', marginLeft: '6px',
+                      verticalAlign: 'super', textDecoration: 'none',
+                      borderBottom: '1px solid rgba(255,255,255,0.15)', lineHeight: 1,
+                    }} title="Source: FTC Commercial Surveillance Report">
+                      {source}
+                    </a>
+                  )}
                 </p>
               </div>
             ))}
