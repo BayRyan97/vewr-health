@@ -452,7 +452,7 @@ function LandingPage() {
         <div style={{ maxWidth: '1080px', margin: '0 auto' }}>
           <div className="vw-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', background: 'rgba(255,255,255,0.06)', borderRadius: '16px', overflow: 'hidden' }}>
             {[
-              { stat: '700+', label: 'companies legally buying and selling your medical data right now', color: ROSE, source: 'FTC', sourceUrl: 'https://www.ftc.gov/reports/commercial-surveillance' },
+              { stat: '500+', label: 'data brokers registered to buy and sell your health data — in California alone', color: ROSE, source: 'CPPA', sourceUrl: 'https://privacy.ca.gov/drop/about-drop-and-the-delete-act/' },
               { stat: '0', label: 'times you were asked for permission', color: AMBER },
               { stat: '1', label: 'person should decide who sees your health records — you', color: T },
             ].map(({ stat, label, color, source, sourceUrl }) => (
