@@ -44,7 +44,7 @@ const FAQS = [
   },
   {
     q: 'If I delete a record, is it actually gone?',
-    a: `Mostly — but not in the way you might expect, so we'll be straight with you.\n\nWhen you delete something, we remove it from your account and stop hosting it. But because of how decentralized storage works, a copy might linger somewhere on the network for a while.\n\nHere's the important part: what's stored online is never your actual file. It's a scrambled version that's completely unreadable without your personal key — which only you have. So even if a copy exists somewhere, it's useless to anyone who finds it. There's nothing there to read.`,
+    a: `What's important to understand is that your actual file never existed online to begin with — only an encrypted version that is completely unreadable without your personal key. Deleting a record removes it from your account and stops us from hosting it. Even in a scenario where a trace persists on the network, there is nothing there anyone could read. The key is yours, and without it the file is meaningless.`,
     tag: 'Deletion',
   },
 ];
