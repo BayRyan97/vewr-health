@@ -454,7 +454,7 @@ function LandingPage() {
             {[
               { stat: '133M', label: 'Americans had health records exposed last year', color: ROSE },
               { stat: '0', label: 'times you were asked for permission', color: AMBER },
-              { stat: '1', label: 'place your records should actually live — with you', color: T },
+              { stat: '1', label: 'person should decide who sees your health records — you', color: T },
             ].map(({ stat, label, color }) => (
               <div key={stat} style={{ padding: '40px 32px', background: '#0d1117' }}>
                 <div style={{
