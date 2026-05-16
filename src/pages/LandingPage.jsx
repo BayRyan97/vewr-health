@@ -9,47 +9,47 @@ const ROSE = '#A10053';
 const FAQS = [
   {
     q: 'Is Vewr HIPAA compliant?',
-    a: `IPFS itself isn't HIPAA compliant out of the box — and we won't pretend otherwise. But Vewr's architecture is designed so that PHI never reaches IPFS in any readable form.\n\nHere's how: your file is encrypted with AES-256-GCM directly in your browser before anything leaves your device. What gets pinned to IPFS is encrypted ciphertext — mathematically unreadable without the decryption key that only you hold. The IPFS network sees a blob of scrambled data, not a medical record.\n\nThis is exactly the architectural approach HIPAA requires for cloud-stored health data: heavy encryption of PHI before it touches any external network. Full technical documentation is available on request for compliance review.`,
+    a: `Short answer: no. But for most people using Vewr, that doesn't matter.\n\nHIPAA is a law for hospitals, insurance companies, and doctors — it governs how institutions handle your health data. It wasn't written to cover what you do with your own records.\n\nVewr is a personal tool. You're storing files you already own. Your files are scrambled on your device before they go anywhere, so even we can't read them. That protection is real regardless of any legal label.`,
     tag: 'HIPAA',
   },
   {
-    q: 'What if I lose access to my account or forget my password?',
-    a: `This works more like a regular account than you might expect. Vewr uses Privy for authentication, which means you sign in with your email and recover access the same way — email + one-time code, no seed phrase required.\n\nUnder the hood, Privy uses MPC (Multi-Party Computation): your encryption key is mathematically split between your device and Privy's infrastructure. Neither half alone can decrypt anything, and neither half alone can be stolen. Recovery just means Privy helps reconstruct your key after verifying your identity via email.\n\nThink of it like MetaMask but without the part where you have to write down 12 words and hope you don't lose them. If you want to export your full recovery phrase for self-custody, you can — but most users never need to.`,
+    q: 'Do I need HIPAA protection to use Vewr safely?',
+    a: `No — and this is worth understanding.\n\nHIPAA was designed to stop hospitals and insurers from mishandling your data. Vewr works differently: your files are scrambled on your device before they ever leave it, using a key only you control. We never see your files. Neither does anyone else.\n\nThat's a stronger privacy guarantee than most HIPAA-covered systems, which can technically access your records whenever they want. We can't — by design.\n\nIf you're a medical practice or health system looking to use Vewr for patient records, that's a different situation and one we'd need to discuss separately. But if you're a patient storing your own health history, you're in good shape.`,
+    tag: 'HIPAA',
+  },
+  {
+    q: 'What if I lose access to my account?',
+    a: `You sign in with your email — no password to forget, no recovery codes to lose track of.\n\nIf you ever get locked out, getting back in works the same way it always does: we send a one-time code to your email and you're in. That's it.`,
     tag: 'Access',
   },
   {
     q: 'Can a doctor access my records in an emergency if I\'m unconscious?',
-    a: `Honestly, no — not without your prior action. That's the real tradeoff with end-to-end encryption: nobody can read your records without access you've granted.\n\nThe way to handle this is to pre-share access with a trusted provider or emergency contact before you need it. In Vewr, you can give your primary care physician standing access to your full record — they sign in with their own account and it's there. You can revoke it anytime.\n\nWe're also working on a time-locked emergency access model. But we'd rather be honest about the current limitation than promise something the encryption doesn't support.`,
+    a: `Not automatically — and we'd rather be upfront about that.\n\nBecause only you can unlock your records, a doctor couldn't access them in an emergency unless you'd shared access with them ahead of time. If you want your doctor to have standing access, you can set that up in your account and revoke it whenever you want.\n\nWe're working on better emergency access options, but we won't promise something that doesn't exist yet.`,
     tag: 'Emergency',
   },
   {
     q: 'What is IPFS and why does Vewr use it?',
-    a: `IPFS (InterPlanetary File System) is a decentralized storage network — instead of your files sitting on one company's server, they're distributed across many independent nodes worldwide.\n\nWe use it for one reason: your records shouldn't depend on Vewr staying in business. If we disappeared tomorrow, your encrypted files remain on the IPFS network, accessible to anyone with your CID (content address) and your decryption key. You're not locked into us the way you're locked into Dropbox or a hospital portal.`,
+    a: `IPFS is a way of storing files across many computers around the world instead of one company's server. There's no single place that can go down and take your files with it.\n\nWe use it so your records don't disappear if Vewr does. Your files live on a network that doesn't depend on us staying in business — and they're scrambled, so only you can read them.`,
     tag: 'Technology',
   },
   {
     q: 'How is this different from MyChart or my hospital\'s patient portal?',
-    a: `MyChart and hospital portals give you a *view* of your records — the data still lives on their servers, under their control. They decide what you can see, who else can access it, and you lose that access the moment you change providers or they shut down the portal.\n\nVerw gives you a copy that's cryptographically yours. It doesn't replace your hospital's portal — it gives you a sovereign backup that travels with you across every provider, every insurer, every state you ever live in.`,
+    a: `Hospital portals give you a window into your records — but the files live on their servers, under their control. They decide what you can see, and you lose access if you switch providers or they change their system.\n\nVewr gives you your own copy that you keep no matter what. It's not a replacement for your hospital's portal — it's your personal backup that moves with you wherever you go.`,
     tag: 'Comparison',
   },
   {
     q: 'Who can actually see my records?',
-    a: `Only someone you've explicitly granted access to. Not the IPFS nodes storing your file. Not your insurance company. Not anyone else.\n\nWhen you upload a file, it's encrypted in your browser with a key tied to your Vewr account via Privy's MPC infrastructure. The key is never stored whole in one place — not on our servers, not on IPFS. We can't read your data even if we wanted to — or were compelled to.`,
+    a: `Only you. When you upload a file, it's scrambled on your device using your personal key before it goes anywhere. That key never leaves your control.\n\nWe can't see your files. We have no backdoor. The only way anyone else could see your records is if you specifically share access with them.`,
     tag: 'Privacy',
   },
   {
     q: 'What file types can I upload?',
-    a: `Currently: PDF, PNG, JPG, and JPEG. These cover the vast majority of medical documents — lab results, imaging reports, prescriptions, vaccination records, and insurance documents.\n\nSupport for DICOM (raw medical imaging), HL7, and FHIR formats is on the roadmap for the provider-facing version.`,
+    a: `Right now: PDFs, JPGs, and PNGs. That covers most things — lab results, doctor's notes, prescriptions, vaccination records, and insurance documents.\n\nMore file types are on the way.`,
     tag: 'Files',
   },
   {
-    q: 'Is Vewr a HIPAA-compliant platform?',
-    a: `No — and for most people using Vewr, that's completely fine. Here's why.\n\nHIPAA governs covered entities: hospitals, insurers, doctors, and the vendors they hire to handle patient data on their behalf. It was written to protect you from institutions mishandling your information — not to regulate what you do with your own records.\n\nWhen you use Vewr, you're an individual storing files you already own. You are not a covered entity. We are not acting as a Business Associate under HIPAA. None of our infrastructure providers (Pinata, Supabase, Privy) have signed BAAs with us, because for a consumer tool, that's not the right legal framework.\n\nWhat Vewr does instead is arguably stronger than what HIPAA requires: your files are encrypted in your browser before they leave your device, and we never hold a key that could decrypt them. HIPAA requires encryption of PHI in transit and at rest — we do that, but the key is yours, not ours. A covered entity with a BAA can still technically read your data. We can't.\n\nIf you're a clinic, hospital, or health system looking at Vewr as infrastructure for storing patient records — that's a different conversation, and we'd need BAAs in place before that could happen. But if you're a patient who wants a private, encrypted copy of your own health history, you don't need HIPAA to protect you. The encryption does.`,
-    tag: 'HIPAA',
-  },
-  {
     q: 'If I delete a record, is it actually gone?',
-    a: `Not in the way you're probably thinking — and we'd rather tell you that upfront.\n\nWhen you delete a record, two things happen: we remove it from your Vewr account and we unpin it from our storage node, which means we stop paying to keep it alive on IPFS. But IPFS is a decentralized network — if any other node cached your file in the brief window it was live, that node could theoretically hold it indefinitely.\n\nHere's why that's less scary than it sounds: what's on IPFS is never your actual medical record. It's AES-256-GCM encrypted ciphertext — a mathematically scrambled blob that is completely unreadable without your decryption key. The key never touched IPFS. So even in the worst case where a cached copy persists somewhere on the network forever, anyone who finds it sees random noise. There's no medical data to expose.\n\nTrue deletion of plaintext isn't a concern because plaintext never left your device in the first place. What you're really deleting is the only key that makes the file meaningful — and that stays yours.`,
+    a: `Mostly — but not in the way you might expect, so we'll be straight with you.\n\nWhen you delete something, we remove it from your account and stop hosting it. But because of how decentralized storage works, a copy might linger somewhere on the network for a while.\n\nHere's the important part: what's stored online is never your actual file. It's a scrambled version that's completely unreadable without your personal key — which only you have. So even if a copy exists somewhere, it's useless to anyone who finds it. There's nothing there to read.`,
     tag: 'Deletion',
   },
 ];

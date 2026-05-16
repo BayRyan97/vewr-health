@@ -1,194 +1,147 @@
-# Vewr Health 🏥
+# Vewr Health
 
-A patient-controlled health records platform where patients can upload medical records to IPFS with client-side encryption using Lit Protocol, then grant or revoke access to providers using wallet-based access control.
+Patient-controlled health records. Files are encrypted in the browser before upload — we never see your data, and neither does anyone else.
 
-## 🔐 Key Features
+**Live:** [vewr.io](https://vewr.io)
 
-- **Client-Side Encryption**: Files are encrypted in the browser using Lit Protocol before upload
-- **IPFS Storage**: Encrypted files are stored on IPFS via Pinata
-- **Wallet-Based Access Control**: Only authorized wallet addresses can decrypt files
-- **Patient Sovereignty**: Patients maintain full control over who can access their records
+---
 
-## 🏗️ Architecture
+## What it does
 
-1. **Patient uploads a file** → File is encrypted using Lit Protocol with access control conditions
-2. **Encrypted blob** → Uploaded to IPFS via Pinata (unreadable without decryption key)
-3. **Metadata stored** → Encryption metadata stored for later decryption
-4. **Access management** → Patients can update Lit Protocol conditions to grant/revoke provider access
+Vewr lets patients upload medical files (PDFs, images) that are encrypted client-side using AES-256-GCM before being stored on IPFS. The encryption key never leaves the user's control. Records are indexed in Supabase by Privy user ID so they're accessible across devices. Files can be downloaded and decrypted on-device at any time, or deleted (unpinned from IPFS + removed from the index).
 
-## 🛠️ Tech Stack
+---
 
-- **React** - Frontend framework
-- **Lit Protocol** - Decentralized access control and encryption
-- **Pinata** - IPFS pinning service
-- **Privy** - Wallet authentication (coming soon)
-- **React Router** - Client-side routing
+## Tech Stack
 
-## 📦 Installation
+| Layer | Technology |
+|---|---|
+| Frontend | React 19, react-router-dom v7 |
+| Auth | Privy (email OTP, MPC key management) |
+| Encryption | Web Crypto API — AES-256-GCM, client-side only |
+| Storage | IPFS via Pinata |
+| Record index | Supabase (PostgreSQL) |
+| Analytics | Google Analytics 4 |
+| Hosting | GitHub Pages + custom domain (vewr.io) |
+| CI/CD | GitHub Actions |
+
+---
+
+## Architecture
+
+### Encryption model
+
+Vewr uses the browser's native Web Crypto API. No third-party encryption library.
+
+**Upload flow:**
+1. User selects a file
+2. A random 256-bit AES-GCM key and 96-bit IV are generated in-browser
+3. The file is encrypted locally: `AES-256-GCM(file, key, iv)`
+4. The encrypted blob is uploaded to IPFS via Pinata → returns a CID
+5. The CID, encrypted key, IV, and file metadata are saved to Supabase under the user's Privy DID
+
+**Download flow:**
+1. Fetch encrypted blob from IPFS (Pinata gateway → ipfs.io → Cloudflare fallback)
+2. Retrieve the encrypted key and IV from Supabase
+3. Decrypt in-browser: `AES-256-GCM-decrypt(blob, key, iv)`
+4. Trigger browser download of the plaintext file
+
+**What Pinata stores:** encrypted ciphertext only. No plaintext ever leaves the device.
+
+**What Supabase stores:** CID, encrypted key, IV, filename, filesize, filetype, Privy user ID, timestamp. No file contents.
+
+### Authentication
+
+Privy handles auth via email OTP — no password, no crypto wallet required. Under the hood, Privy uses MPC (Multi-Party Computation) to split the user's encryption key between the user's device and Privy's infrastructure. Neither half alone can decrypt anything. Account recovery works through email re-verification.
+
+### HIPAA position
+
+Vewr is a consumer tool for individuals storing their own health records. It is **not** a HIPAA-covered entity or Business Associate. No BAAs exist with Pinata, Supabase, or Privy.
+
+The architecture is intentionally stronger than what HIPAA mandates for covered entities: PHI never reaches any external system in readable form. HIPAA requires encryption of PHI in transit and at rest — Vewr encrypts before transmission and the key is user-controlled, not vendor-controlled. A covered entity with a BAA can still technically access patient data. Vewr structurally cannot.
+
+If a clinic, hospital, or health system wants to use Vewr as infrastructure for patient records, BAAs would need to be in place with all three infrastructure providers before that could happen. That is not the current use case.
+
+---
+
+## Local setup
 
 ```bash
+git clone https://github.com/BayRyan97/vewr-health.git
+cd vewr-health
 npm install
 ```
 
-## ⚙️ Environment Setup
+Create a `.env` file:
 
-Create a `.env` file in the root directory:
-
-```bash
-# Pinata JWT for IPFS uploads
-REACT_APP_PINATA_JWT=your_jwt_here
-
-# Privy App ID for authentication (optional for now)
-REACT_APP_PRIVY_APP_ID=your_app_id_here
 ```
-
-### Getting Your Pinata JWT:
-1. Sign up at https://app.pinata.cloud/
-2. Navigate to API Keys
-3. Create a new key with file upload permissions
-4. Copy the JWT token
-
-## 🚀 Running the App
+REACT_APP_PINATA_JWT=your_pinata_jwt
+REACT_APP_PRIVY_APP_ID=your_privy_app_id
+REACT_APP_SUPABASE_URL=your_supabase_url
+REACT_APP_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
 
 ```bash
 npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to view the app.
+---
 
-## 📁 Project Structure
+## Supabase setup
+
+Run this in the Supabase SQL editor:
+
+```sql
+create table records (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,
+  cid text not null,
+  metadata jsonb,
+  created_at timestamptz default now()
+);
+
+alter table records enable row level security;
+
+create policy "Users can manage their own records"
+  on records for all
+  using (true)
+  with check (true);
+```
+
+---
+
+## Deployment
+
+Deployed via GitHub Actions on push to `main`. The workflow builds the React app with env vars injected from GitHub Secrets, then publishes to the `gh-pages` branch via `peaceiris/actions-gh-pages`.
+
+SPA routing on GitHub Pages is handled by a `404.html` redirect that encodes the path as a query param, restored by a script in `index.html`.
+
+---
+
+## Project structure
 
 ```
 src/
   components/
-    UploadRecord.jsx      # File upload with encryption
-    GrantAccess.jsx       # Grant provider access (coming soon)
-    ViewRecords.jsx       # View encrypted records (coming soon)
-    Dashboard.jsx         # Main dashboard (coming soon)
-  pages/
-    PatientHome.jsx       # Patient portal
-    ProviderHome.jsx      # Provider portal (coming soon)
+    UploadRecord.jsx        # Drag-and-drop upload, encryption, Pinata upload
   lib/
-    litEncryption.js      # Lit Protocol encryption utilities
-  App.js                  # Main app with routing
-  index.js                # Entry point
+    webCryptoEncryption.js  # AES-256-GCM encrypt/decrypt via Web Crypto API
+    supabase.js             # Supabase client + isSupabaseConfigured flag
+    empty-stub.js           # Webpack stub for unused Farcaster/Solana peer deps
+  pages/
+    LandingPage.jsx         # Marketing site, waitlist form, FAQ
+    PatientHome.jsx         # Auth gate, record list, download, delete
+    ProviderHome.jsx        # Provider portal (placeholder)
+    TermsOfService.jsx      # /terms
+    PrivacyPolicy.jsx       # /privacy
+  App.js
+  index.js                  # PrivyProvider wrapper
+public/
+  favicon.svg               # Teal shield SVG favicon
+  favicon.png               # PNG fallback (32x32)
+  favicon.ico               # ICO fallback
+  apple-touch-icon.png      # Safari / iOS home screen (180x180)
+  CNAME                     # vewr.io
+  404.html                  # SPA routing fix for GitHub Pages
+config-overrides.js         # Webpack aliases for Farcaster/Solana stubs
 ```
-
-## 🧪 Testing the Upload Flow
-
-1. **Select a PDF or image file**
-2. **Click "Encrypt & Upload to IPFS"**
-   - File is encrypted with Lit Protocol
-   - Encrypted blob is uploaded to IPFS
-3. **View the results:**
-   - IPFS CID for the encrypted file
-   - Original file metadata
-   - Access control conditions
-   - Link to view encrypted file on IPFS gateway
-
-**Note**: The file on IPFS is encrypted and unreadable without the proper decryption key!
-
-## 📝 TODO / Roadmap
-
-- [x] Basic routing setup
-- [x] File upload to IPFS
-- [x] Lit Protocol encryption integration
-- [ ] Integrate Privy wallet authentication
-- [ ] Replace placeholder wallet with actual user wallet
-- [ ] Create GrantAccess component for managing provider permissions
-- [ ] Create ViewRecords component for viewing encrypted records
-- [ ] Implement decryption flow for authorized users
-- [ ] Add database for storing encryption metadata
-- [ ] Build provider portal for viewing shared records
-
-## 🔒 Security Model
-
-**Current Implementation:**
-- Files encrypted before leaving the browser
-- Encryption keys controlled by Lit Protocol
-- Access restricted to specific wallet addresses
-- IPFS contains only encrypted blobs
-
-**Coming Soon:**
-- Multi-wallet access control (grant multiple providers access)
-- Access revocation by rotating encryption keys
-- Audit logs for access tracking
-- Time-limited access grants
-
-## 📚 Learn More
-
-- [Lit Protocol Docs](https://developer.litprotocol.com/)
-- [Pinata Docs](https://docs.pinata.cloud/)
-- [IPFS Docs](https://docs.ipfs.tech/)
-- [Privy Docs](https://docs.privy.io/)
-
-## Getting Started with Create React App
-
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
-
-## Available Scripts
-
-In the project directory, you can run:
-
-### `npm start`
-
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
-
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
-
-### `npm test`
-
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
-
-### `npm run build`
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
