@@ -9,12 +9,7 @@ const ROSE = '#A10053';
 const FAQS = [
   {
     q: 'Is Vewr HIPAA compliant?',
-    a: `Short answer: no. But for most people using Vewr, that doesn't matter.\n\nHIPAA is a law for hospitals, insurance companies, and doctors — it governs how institutions handle your health data. It wasn't written to cover what you do with your own records.\n\nVewr is a personal tool. You're storing files you already own. Your files are scrambled on your device before they go anywhere, so even we can't read them. That protection is real regardless of any legal label.`,
-    tag: 'HIPAA',
-  },
-  {
-    q: 'Do I need HIPAA protection to use Vewr safely?',
-    a: `No — and this is worth understanding.\n\nHIPAA was designed to stop hospitals and insurers from mishandling your data. Vewr works differently: your files are scrambled on your device before they ever leave it, using a key only you control. We never see your files. Neither does anyone else.\n\nThat's a stronger privacy guarantee than most HIPAA-covered systems, which can technically access your records whenever they want. We can't — by design.\n\nIf you're a medical practice or health system looking to use Vewr for patient records, that's a different situation and one we'd need to discuss separately. But if you're a patient storing your own health history, you're in good shape.`,
+    a: `Vewr isn't currently HIPAA certified, but the way we store your data — encrypted on your device before it ever reaches us — meets the core technical standard HIPAA requires. Full compliance, including the legal and operational framework, is on our roadmap.`,
     tag: 'HIPAA',
   },
   {
@@ -29,7 +24,7 @@ const FAQS = [
   },
   {
     q: 'What is IPFS and why does Vewr use it?',
-    a: `IPFS is a way of storing files across many computers around the world instead of one company's server. There's no single place that can go down and take your files with it.\n\nWe use it so your records don't disappear if Vewr does. Your files live on a network that doesn't depend on us staying in business — and they're scrambled, so only you can read them.`,
+    a: `Instead of storing your files on a single server that could go down or get hacked, Vewr uses a distributed network called IPFS — the same type of resilient infrastructure that powers some of the most reliable systems on the internet.\n\nYour files aren't sitting in one place. They're distributed, encrypted, and tied to your account. No single point of failure, and no one can read them without your key.`,
     tag: 'Technology',
   },
   {
