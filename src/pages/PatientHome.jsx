@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import UploadRecord from '../components/UploadRecord';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { decryptFile } from '../lib/webCryptoEncryption';
+import { createShareLink, getShareLinksForRecord, revokeShareLink } from '../lib/shareLinks';
 
 const T = '#00A19C';
 const T_DARK = '#007F7B';
@@ -197,11 +198,325 @@ async function fetchFromIPFS(cid) {
   throw new Error('Could not retrieve file from IPFS. Try again in a moment.');
 }
 
-function RecordsList({ records, onDelete }) {
+// ─── Share Panel ──────────────────────────────────────────────────────────────
+const EXPIRY_PRESETS = [
+  { label: '24 hours', hours: 24 },
+  { label: '7 days', hours: 168 },
+  { label: '30 days', hours: 720 },
+];
+
+// Returns a datetime-local string for "now + 1 hour" as the minimum allowed custom date
+function minCustomDatetime() {
+  const d = new Date(Date.now() + 60 * 60 * 1000);
+  // Format as YYYY-MM-DDTHH:MM (datetime-local format, local time)
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function SharePanel({ record, userId, onClose }) {
+  const [expiryMode, setExpiryMode] = useState('preset'); // 'preset' | 'custom'
+  const [selectedPreset, setSelectedPreset] = useState(EXPIRY_PRESETS[0]);
+  const [customDatetime, setCustomDatetime] = useState(''); // datetime-local value
+  const [creating, setCreating] = useState(false);
+  const [generatedUrl, setGeneratedUrl] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [activeLinks, setActiveLinks] = useState([]);
+  const [loadingLinks, setLoadingLinks] = useState(true);
+  const [revoking, setRevoking] = useState({});
+  const [shareError, setShareError] = useState('');
+
+  const loadLinks = useCallback(async () => {
+    setLoadingLinks(true);
+    const { data } = await getShareLinksForRecord(record.id, userId);
+    setActiveLinks(data || []);
+    setLoadingLinks(false);
+  }, [record.id, userId]);
+
+  useEffect(() => { loadLinks(); }, [loadLinks]);
+
+  // Compute hours from either preset or custom datetime
+  const getExpiryHours = () => {
+    if (expiryMode === 'preset') return selectedPreset.hours;
+    if (!customDatetime) return null;
+    const target = new Date(customDatetime);
+    const diffMs = target.getTime() - Date.now();
+    if (diffMs <= 0) return null;
+    return diffMs / (1000 * 60 * 60); // fractional hours is fine — stored as ISO timestamp
+  };
+
+  const handleCreate = async () => {
+    setShareError('');
+    setGeneratedUrl(null);
+
+    const hours = getExpiryHours();
+    if (hours === null) {
+      setShareError(expiryMode === 'custom'
+        ? 'Please pick a future date and time.'
+        : 'Invalid expiry. Please choose an option.');
+      return;
+    }
+
+    setCreating(true);
+    const { data, error } = await createShareLink(record, userId, hours);
+    if (error || !data) {
+      setShareError('Failed to create share link. Please try again.');
+    } else {
+      const url = `${window.location.origin}/share/${data.token}`;
+      setGeneratedUrl(url);
+      track('record_shared', { file_type: record.metadata?.originalFileType, expiry_hours: Math.round(hours) });
+      await loadLinks();
+    }
+    setCreating(false);
+  };
+
+  const handleCopy = () => {
+    if (!generatedUrl) return;
+    navigator.clipboard.writeText(generatedUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const handleRevoke = async (linkId) => {
+    setRevoking(prev => ({ ...prev, [linkId]: true }));
+    await revokeShareLink(linkId);
+    track('share_link_revoked');
+    await loadLinks();
+    setRevoking(prev => ({ ...prev, [linkId]: false }));
+  };
+
+  const formatShortExpiry = (dateStr) => {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  };
+
+  const isCustomMode = expiryMode === 'custom';
+  const canCreate = isCustomMode ? !!customDatetime : true;
+
+  return (
+    <div style={{
+      background: '#f8faff', border: `1px solid ${T}25`,
+      borderRadius: '12px', padding: '20px 22px',
+      marginTop: '4px',
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+          </svg>
+          <span style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>Share Record</span>
+        </div>
+        <button onClick={onClose} style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: '#9ca3af', fontSize: '18px', lineHeight: 1, padding: '2px 4px',
+        }}>×</button>
+      </div>
+
+      {/* Expiry picker */}
+      <div style={{ marginBottom: '14px' }}>
+        <div style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Link expires
+        </div>
+
+        {/* Preset + Custom toggle row */}
+        <div style={{ display: 'flex', gap: '6px', marginBottom: isCustomMode ? '10px' : '0' }}>
+          {EXPIRY_PRESETS.map(opt => {
+            const active = !isCustomMode && selectedPreset.hours === opt.hours;
+            return (
+              <button
+                key={opt.hours}
+                onClick={() => { setExpiryMode('preset'); setSelectedPreset(opt); setShareError(''); }}
+                style={{
+                  flex: 1, padding: '8px 6px', borderRadius: '8px',
+                  cursor: 'pointer', fontSize: '13px', fontWeight: '500', fontFamily: FONT,
+                  background: active ? T : 'white',
+                  color: active ? 'white' : '#374151',
+                  boxShadow: active ? `0 2px 8px ${T}40` : '0 1px 3px rgba(0,0,0,0.07)',
+                  border: `1px solid ${active ? T : '#e5e7eb'}`,
+                  transition: 'all 0.15s',
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+          {/* Custom button */}
+          <button
+            onClick={() => {
+              setExpiryMode('custom');
+              if (!customDatetime) setCustomDatetime(minCustomDatetime());
+              setShareError('');
+            }}
+            style={{
+              flex: 1, padding: '8px 6px', borderRadius: '8px',
+              cursor: 'pointer', fontSize: '13px', fontWeight: '500', fontFamily: FONT,
+              background: isCustomMode ? T : 'white',
+              color: isCustomMode ? 'white' : '#374151',
+              boxShadow: isCustomMode ? `0 2px 8px ${T}40` : '0 1px 3px rgba(0,0,0,0.07)',
+              border: `1px solid ${isCustomMode ? T : '#e5e7eb'}`,
+              transition: 'all 0.15s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            Custom
+          </button>
+        </div>
+
+        {/* Custom datetime input */}
+        {isCustomMode && (
+          <div style={{ position: 'relative' }}>
+            <input
+              type="datetime-local"
+              value={customDatetime}
+              min={minCustomDatetime()}
+              onChange={e => { setCustomDatetime(e.target.value); setShareError(''); }}
+              style={{
+                width: '100%', padding: '10px 14px',
+                border: `1px solid ${T}40`, borderRadius: '9px',
+                fontSize: '14px', color: '#111827', background: 'white',
+                fontFamily: FONT, outline: 'none', boxSizing: 'border-box',
+                cursor: 'pointer',
+              }}
+            />
+            <p style={{ fontSize: '12px', color: '#9ca3af', margin: '6px 0 0 2px' }}>
+              Times are in your local timezone.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Generate button */}
+      <button
+        onClick={handleCreate}
+        disabled={creating || !canCreate}
+        style={{
+          width: '100%', padding: '11px 18px',
+          background: (creating || !canCreate) ? '#e5e7eb' : T,
+          color: (creating || !canCreate) ? '#9ca3af' : 'white',
+          border: 'none', borderRadius: '9px',
+          fontSize: '14px', fontWeight: '600', cursor: (creating || !canCreate) ? 'not-allowed' : 'pointer',
+          fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+          transition: 'all 0.2s',
+          boxShadow: (creating || !canCreate) ? 'none' : `0 3px 10px ${T}35`,
+          marginBottom: '14px',
+        }}
+      >
+        {creating ? (
+          <>
+            <div style={{ width: '12px', height: '12px', borderRadius: '50%', border: `2px solid #9ca3af`, borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />
+            Creating link…
+          </>
+        ) : (
+          <>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+            Generate share link
+          </>
+        )}
+      </button>
+
+      {/* Error */}
+      {shareError && (
+        <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', fontSize: '13px', color: '#dc2626', marginBottom: '12px' }}>
+          {shareError}
+        </div>
+      )}
+
+      {/* Generated URL */}
+      {generatedUrl && (
+        <div style={{
+          background: 'white', border: `1px solid ${T}30`, borderRadius: '10px',
+          padding: '14px', marginBottom: '14px',
+        }}>
+          <div style={{ fontSize: '11px', fontWeight: '600', color: '#6b7280', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Share link ready
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{
+              flex: 1, fontFamily: 'monospace', fontSize: '12px', color: '#374151',
+              background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '7px',
+              padding: '8px 10px', wordBreak: 'break-all', lineHeight: '1.4',
+            }}>
+              {generatedUrl}
+            </div>
+            <button
+              onClick={handleCopy}
+              style={{
+                flexShrink: 0, padding: '9px 14px', borderRadius: '8px',
+                border: `1px solid ${copied ? T : '#e5e7eb'}`,
+                background: copied ? `${T}12` : 'white',
+                color: copied ? T : '#374151',
+                fontSize: '13px', fontWeight: '600', cursor: 'pointer',
+                fontFamily: FONT, transition: 'all 0.2s', whiteSpace: 'nowrap',
+              }}
+            >
+              {copied ? '✓ Copied' : 'Copy'}
+            </button>
+          </div>
+          <p style={{ fontSize: '12px', color: '#9ca3af', margin: '8px 0 0 0' }}>
+            Anyone with this link can view the file until it expires. Revoke it below to cut off access immediately.
+          </p>
+        </div>
+      )}
+
+      {/* Active links list */}
+      {!loadingLinks && activeLinks.length > 0 && (
+        <div>
+          <div style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Active links ({activeLinks.length})
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {activeLinks.map(link => (
+              <div key={link.id} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '10px 14px', gap: '12px',
+              }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '12px', fontFamily: 'monospace', color: '#374151', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    …{link.token.slice(-12)}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9ca3af' }}>
+                    Expires {formatShortExpiry(link.expires_at)}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleRevoke(link.id)}
+                  disabled={revoking[link.id]}
+                  style={{
+                    padding: '5px 12px', borderRadius: '6px', border: '1px solid #fca5a5',
+                    background: revoking[link.id] ? '#f9fafb' : '#fff5f5',
+                    color: '#dc2626', fontSize: '12px', fontWeight: '600',
+                    cursor: revoking[link.id] ? 'not-allowed' : 'pointer',
+                    fontFamily: FONT, flexShrink: 0, transition: 'all 0.15s',
+                  }}
+                >
+                  {revoking[link.id] ? '…' : 'Revoke'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RecordsList({ records, onDelete, userId = '' }) {
   const [downloading, setDownloading] = useState({}); // { [recordId]: 'fetching' | 'decrypting' | null }
   const [dlError, setDlError] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(null); // record id awaiting confirmation
   const [deleting, setDeleting] = useState({}); // { [recordId]: true }
+  const [shareOpen, setShareOpen] = useState(null); // record id with share panel open
 
   const handleDownload = async (record) => {
     const { id, cid, metadata } = record;
@@ -244,6 +559,7 @@ function RecordsList({ records, onDelete }) {
       // Second click — execute delete
       setDeleting(prev => ({ ...prev, [record.id]: true }));
       setConfirmDelete(null);
+      setShareOpen(null);
       onDelete(record).finally(() => {
         setDeleting(prev => ({ ...prev, [record.id]: false }));
       });
@@ -253,6 +569,11 @@ function RecordsList({ records, onDelete }) {
       // Auto-cancel after 3 s if user doesn't confirm
       setTimeout(() => setConfirmDelete(id => id === record.id ? null : id), 3000);
     }
+  };
+
+  const toggleShare = (recordId) => {
+    setShareOpen(prev => prev === recordId ? null : recordId);
+    setConfirmDelete(null);
   };
 
   if (records.length === 0) {
@@ -287,6 +608,8 @@ function RecordsList({ records, onDelete }) {
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         .dl-btn:hover { background: #f0fdfb !important; border-color: ${T} !important; color: ${T} !important; }
+        .share-btn:hover { background: #f0fdfb !important; border-color: ${T} !important; color: ${T} !important; }
+        .share-btn-active { background: ${T}12 !important; border-color: ${T} !important; color: ${T} !important; }
         .del-btn:hover { background: #fef2f2 !important; border-color: #fca5a5 !important; color: #dc2626 !important; }
         .del-confirm:hover { background: #dc2626 !important; color: white !important; }
       `}</style>
@@ -302,12 +625,13 @@ function RecordsList({ records, onDelete }) {
         const err = dlError[record.id];
         const isConfirming = confirmDelete === record.id;
         const isDeletingThis = deleting[record.id];
+        const isShareOpen = shareOpen === record.id;
 
         return (
-          <div key={record.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div key={record.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <div style={{
               background: 'white', borderRadius: '12px',
-              border: `1px solid ${isConfirming ? '#fca5a5' : err ? '#fecaca' : '#e5e7eb'}`,
+              border: `1px solid ${isConfirming ? '#fca5a5' : isShareOpen ? `${T}40` : err ? '#fecaca' : '#e5e7eb'}`,
               padding: '18px 24px',
               display: 'flex', alignItems: 'center',
               justifyContent: 'space-between', gap: '16px',
@@ -339,8 +663,8 @@ function RecordsList({ records, onDelete }) {
                 </div>
               </div>
 
-              {/* Right: badge + download */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+              {/* Right: badge + actions */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                 <span style={{
                   background: '#f0fdfb', color: T,
                   border: `1px solid ${T}30`,
@@ -350,6 +674,32 @@ function RecordsList({ records, onDelete }) {
                   🔐 Encrypted
                 </span>
 
+                {/* Share button */}
+                {isSupabaseConfigured && (
+                  <button
+                    className={`share-btn${isShareOpen ? ' share-btn-active' : ''}`}
+                    onClick={() => toggleShare(record.id)}
+                    disabled={isDeletingThis}
+                    title="Share record"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '5px',
+                      padding: '7px 12px', borderRadius: '8px',
+                      border: '1px solid #e5e7eb', background: 'white',
+                      color: '#374151', fontSize: '13px', fontWeight: '500',
+                      cursor: isDeletingThis ? 'not-allowed' : 'pointer',
+                      fontFamily: FONT, transition: 'all 0.15s',
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                    </svg>
+                    Share
+                  </button>
+                )}
+
+                {/* Download button */}
                 <button
                   className="dl-btn"
                   onClick={() => handleDownload(record)}
@@ -428,6 +778,15 @@ function RecordsList({ records, onDelete }) {
                 </button>
               </div>
             </div>
+
+            {/* Share panel */}
+            {isShareOpen && (
+              <SharePanel
+                record={record}
+                userId={userId}
+                onClose={() => setShareOpen(null)}
+              />
+            )}
 
             {err && (
               <div style={{
@@ -708,7 +1067,7 @@ function Dashboard({ userEmail, userId, onLogout }) {
         </div>
 
         {activeTab === 'upload' && <UploadRecord onUploadSuccess={handleUploadSuccess} />}
-        {activeTab === 'records' && <RecordsList records={records} onDelete={handleDelete} />}
+        {activeTab === 'records' && <RecordsList records={records} onDelete={handleDelete} userId={userId} />}
       </div>
     </div>
   );

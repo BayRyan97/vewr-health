@@ -5,6 +5,7 @@ import PatientHome from './pages/PatientHome';
 import ProviderHome from './pages/ProviderHome';
 import TermsOfService from './pages/TermsOfService';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import ShareView from './pages/ShareView';
 import './App.css';
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
         <Route path="/provider" element={<ProviderHome />} />
         <Route path="/terms" element={<TermsOfService />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/share/:token" element={<ShareView />} />
       </Routes>
     </Router>
   );
