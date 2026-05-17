@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import emailjs from '@emailjs/browser';
+
+// ─── EmailJS config — fill these in once your @vewr.io email is ready ────────
+const EMAILJS_ENABLED = false; // flip to true when ready
+const EMAILJS_SERVICE_ID  = 'YOUR_SERVICE_ID';
+const EMAILJS_TEMPLATE_ID = 'YOUR_TEMPLATE_ID';
+const EMAILJS_PUBLIC_KEY  = 'YOUR_PUBLIC_KEY';
 
 const T = '#00A19C';
 const T_DARK = '#007F7B';
@@ -156,9 +163,22 @@ function LandingPage() {
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ email }),
       });
-      setSubmitState(res.ok ? 'success' : 'error');
 
-      if (res.ok) setEmail('');
+      if (res.ok) {
+        // Send confirmation email via EmailJS once @vewr.io is set up
+        if (EMAILJS_ENABLED) {
+          await emailjs.send(
+            EMAILJS_SERVICE_ID,
+            EMAILJS_TEMPLATE_ID,
+            { to_email: email, to_name: email.split('@')[0] },
+            EMAILJS_PUBLIC_KEY
+          );
+        }
+        setEmail('');
+        setSubmitState('success');
+      } else {
+        setSubmitState('error');
+      }
     } catch {
       setSubmitState('error');
     }
@@ -752,6 +772,144 @@ function LandingPage() {
 
       {/* ── FAQ ── */}
       <FaqSection T={T} AMBER={AMBER} ROSE={ROSE} />
+
+      {/* ── HIPAA ROADMAP ── */}
+      <section style={{ padding: '100px 40px', background: '#0d1117' }}>
+        <div style={{ maxWidth: '1080px', margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: '64px' }}>
+            <p style={{ color: T, fontSize: '12px', fontWeight: '700', letterSpacing: '2px', margin: '0 0 12px 0' }}>
+              COMPLIANCE ROADMAP
+            </p>
+            <h2 style={{
+              fontSize: 'clamp(26px, 3vw, 38px)', fontWeight: '800',
+              letterSpacing: '-1px', color: 'white', margin: '0 0 16px 0', lineHeight: 1.15,
+            }}>
+              Where we stand and where we're going.
+            </h2>
+            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '16px', margin: 0, maxWidth: '520px', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.7 }}>
+              We believe in being upfront about what Vewr is today and what it's building toward.
+            </p>
+          </div>
+
+          {/* Timeline */}
+          <div style={{ position: 'relative' }}>
+            {/* Connecting line */}
+            <div style={{
+              position: 'absolute', top: '36px', left: '0', right: '0',
+              height: '2px', background: 'rgba(255,255,255,0.06)',
+              zIndex: 0,
+            }} />
+
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '24px', position: 'relative', zIndex: 1,
+            }}>
+              {[
+                {
+                  phase: 'Phase 1',
+                  status: 'Now',
+                  color: T,
+                  title: 'Consumer Privacy',
+                  points: [
+                    'Client-side encryption before upload',
+                    'Files are unreadable without your key',
+                    'No PHI stored on our servers',
+                    'Built for individuals, not institutions',
+                  ],
+                },
+                {
+                  phase: 'Phase 2',
+                  status: 'Next',
+                  color: AMBER,
+                  title: 'Legal Framework',
+                  points: [
+                    'Business Associate Agreements with all vendors',
+                    'Formal audit logs and access controls',
+                    'Breach notification procedures',
+                    'Annual risk assessments',
+                  ],
+                },
+                {
+                  phase: 'Phase 3',
+                  status: 'Goal',
+                  color: ROSE,
+                  title: 'Full HIPAA Compliance',
+                  points: [
+                    'Certified for use by clinics and hospitals',
+                    'Provider portal with verified HCP accounts',
+                    'Compliant data sharing between patients and providers',
+                    'Enterprise-grade audit trail',
+                  ],
+                },
+              ].map((phase, i) => (
+                <div key={i} style={{ display: 'flex', flexDirection: 'column' }}>
+                  {/* Phase dot + status */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                    <div style={{
+                      width: '36px', height: '36px', borderRadius: '50%',
+                      background: `${phase.color}20`, border: `2px solid ${phase.color}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0,
+                    }}>
+                      {i === 0 ? (
+                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: phase.color }} />
+                      ) : (
+                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: `${phase.color}40` }} />
+                      )}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: phase.color, letterSpacing: '1px' }}>
+                        {phase.phase} · {phase.status}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card */}
+                  <div style={{
+                    background: i === 0 ? `${phase.color}08` : 'rgba(255,255,255,0.02)',
+                    border: `1px solid ${i === 0 ? phase.color + '30' : 'rgba(255,255,255,0.06)'}`,
+                    borderRadius: '16px', padding: '28px',
+                    flex: 1,
+                  }}>
+                    <h3 style={{
+                      color: 'white', fontSize: '18px', fontWeight: '700',
+                      margin: '0 0 20px 0', letterSpacing: '-0.3px',
+                    }}>
+                      {phase.title}
+                    </h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {phase.points.map((point, j) => (
+                        <div key={j} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                          <div style={{
+                            width: '18px', height: '18px', borderRadius: '50%',
+                            background: `${phase.color}15`, border: `1px solid ${phase.color}30`,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            flexShrink: 0, marginTop: '1px',
+                          }}>
+                            {i === 0 ? (
+                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={phase.color} strokeWidth="3">
+                                <polyline points="20 6 9 17 4 12"/>
+                              </svg>
+                            ) : (
+                              <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: `${phase.color}50` }} />
+                            )}
+                          </div>
+                          <p style={{
+                            color: i === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.35)',
+                            fontSize: '14px', margin: 0, lineHeight: '1.6',
+                          }}>
+                            {point}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* ── FOOTER CTA ── */}
       <section className="vw-footer-cta" style={{

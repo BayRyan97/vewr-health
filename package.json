@@ -4,6 +4,7 @@
   "private": true,
   "homepage": "https://vewr.io",
   "dependencies": {
+    "@emailjs/browser": "^4.4.1",
     "@lit-protocol/encryption": "^7.4.0",
     "@lit-protocol/lit-node-client": "^7.4.0",
     "@lit-protocol/uint8arrays": "^7.4.0",

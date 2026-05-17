@@ -15,10 +15,17 @@ function UploadRecord({ onUploadSuccess }) {
 
   const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
 
+  const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+
   const handleFile = (f) => {
     if (!f) return;
     if (!validTypes.includes(f.type)) {
-      setErrorMsg('Please select a PDF or image file (PNG, JPG, JPEG)');
+      setErrorMsg('Please select a PDF or image file (PNG, JPG, JPEG).');
+      setFile(null);
+      return;
+    }
+    if (f.size > MAX_FILE_SIZE) {
+      setErrorMsg(`File is too large. Maximum size is 25MB. Your file is ${(f.size / (1024 * 1024)).toFixed(1)}MB.`);
       setFile(null);
       return;
     }
@@ -154,7 +161,7 @@ function UploadRecord({ onUploadSuccess }) {
                 {dragging ? 'Drop it here' : 'Click or drag to upload'}
               </p>
               <p style={{ margin: 0, fontSize: '13px', color: '#9ca3af' }}>
-                PDF, PNG, JPG, or JPEG
+                PDF, PNG, JPG, or JPEG · Max 25MB
               </p>
             </>
           ) : (

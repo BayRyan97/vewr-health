@@ -118,6 +118,33 @@ SPA routing on GitHub Pages is handled by a `404.html` redirect that encodes the
 
 ---
 
+## Technical Roadmap
+
+### Phase 1 → Phase 2 (Legal Framework)
+
+Mostly non-technical but has technical dependencies:
+
+- **Supabase HIPAA tier** — Supabase offers a HIPAA-eligible plan with a signed BAA. Requires upgrading to a paid plan
+- **Pinata BAA** — Pinata offers BAAs on enterprise plans. Needs formal evaluation and contract
+- **Privy BAA** — Verify Privy's HIPAA offering. If unavailable, evaluate alternative auth providers
+- **Audit logging** — Add a `record_access_log` table in Supabase tracking every download event with timestamp, user ID, and record ID. Currently no access logs exist
+- **Key management hardening** — Move toward a more formal key management approach as part of the HIPAA framework
+
+### Phase 2 → Phase 3 (Full Compliance + Provider Product)
+
+- **HCP identity verification** — Verify licensed providers via NPI number lookup against the CMS National Plan & Provider Enumeration System (NPPES) registry
+- **Provider accounts** — Separate auth flow, Supabase table, and permissions model for verified healthcare providers
+- **Record sharing architecture** — Design how patients share records with providers without transferring raw decryption keys. Options include re-encryption or proxy encryption schemes
+- **FHIR/HL7 support** — Hospital systems communicate in these formats. Required for any real EHR integration
+- **Breach notification pipeline** — HIPAA requires notifying affected users within 60 days of a breach. Needs automated detection and notification system
+- **Third-party penetration testing** — Required before any enterprise or hospital contract
+
+### Critical path
+
+Getting BAAs signed with Supabase, Pinata, and Privy is the prerequisite for everything in Phase 2. The technical work can be scoped in parallel but nothing is certifiable without the legal agreements.
+
+---
+
 ## Project structure
 
 ```
