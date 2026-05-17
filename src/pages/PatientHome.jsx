@@ -632,19 +632,19 @@ function RecordsList({ records, onDelete, userId = '' }) {
             <div style={{
               background: 'white', borderRadius: '12px',
               border: `1px solid ${isConfirming ? '#fca5a5' : isShareOpen ? `${T}40` : err ? '#fecaca' : '#e5e7eb'}`,
-              padding: '18px 24px',
-              display: 'flex', alignItems: 'center',
-              justifyContent: 'space-between', gap: '16px',
+              padding: '16px 20px',
               transition: 'border-color 0.2s',
             }}>
+              {/* Top row: file info + action buttons */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
               {/* Left: file info */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
                 <div style={{
-                  width: '42px', height: '42px', borderRadius: '10px',
+                  width: '38px', height: '38px', borderRadius: '9px',
                   background: '#f0fdfb', border: `1px solid ${T}25`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                 }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                     <polyline points="14 2 14 8 20 8" />
                   </svg>
@@ -652,7 +652,7 @@ function RecordsList({ records, onDelete, userId = '' }) {
                 <div style={{ minWidth: 0 }}>
                   <div style={{
                     fontWeight: '600', color: '#111827', fontSize: '14px',
-                    marginBottom: '3px', whiteSpace: 'nowrap',
+                    marginBottom: '2px', whiteSpace: 'nowrap',
                     overflow: 'hidden', textOverflow: 'ellipsis',
                   }}>
                     {name}
@@ -663,41 +663,8 @@ function RecordsList({ records, onDelete, userId = '' }) {
                 </div>
               </div>
 
-              {/* Right: badge + actions */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                <span style={{
-                  background: '#f0fdfb', color: T,
-                  border: `1px solid ${T}30`,
-                  padding: '3px 10px', borderRadius: '6px',
-                  fontSize: '12px', fontWeight: '600',
-                }}>
-                  🔐 Encrypted
-                </span>
-
-                {/* IPFS verification link */}
-                <a
-                  href={`https://ipfs.io/ipfs/${record.cid}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="View raw encrypted file on IPFS"
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '4px',
-                    padding: '7px 11px', borderRadius: '8px',
-                    border: '1px solid #e5e7eb', background: 'white',
-                    color: '#9ca3af', fontSize: '12px', fontWeight: '500',
-                    textDecoration: 'none', transition: 'all 0.15s',
-                    whiteSpace: 'nowrap',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.color = T; e.currentTarget.style.borderColor = T; e.currentTarget.style.background = '#f0fdfb'; }}
-                  onMouseLeave={e => { e.currentTarget.style.color = '#9ca3af'; e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.background = 'white'; }}
-                >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                    <polyline points="15 3 21 3 21 9" />
-                    <line x1="10" y1="14" x2="21" y2="3" />
-                  </svg>
-                  IPFS
-                </a>
+              {/* Right: action buttons */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexShrink: 0 }}>
 
                 {/* Share button */}
                 {isSupabaseConfigured && (
@@ -801,6 +768,42 @@ function RecordsList({ records, onDelete, userId = '' }) {
                     </svg>
                   )}
                 </button>
+              </div>
+              </div>{/* end top row */}
+
+              {/* Bottom row: encrypted badge + IPFS link */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                marginTop: '10px', paddingTop: '10px',
+                borderTop: '1px solid #f3f4f6',
+              }}>
+                <span style={{
+                  background: '#f0fdfb', color: T,
+                  border: `1px solid ${T}30`,
+                  padding: '2px 9px', borderRadius: '5px',
+                  fontSize: '11px', fontWeight: '600',
+                }}>
+                  🔐 AES-256-GCM encrypted
+                </span>
+                <a
+                  href={`https://ipfs.io/ipfs/${record.cid}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                    fontSize: '11px', color: '#9ca3af', textDecoration: 'none',
+                    transition: 'color 0.15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.color = T}
+                  onMouseLeave={e => e.currentTarget.style.color = '#9ca3af'}
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <polyline points="15 3 21 3 21 9" />
+                    <line x1="10" y1="14" x2="21" y2="3" />
+                  </svg>
+                  Verify on IPFS
+                </a>
               </div>
             </div>
 
