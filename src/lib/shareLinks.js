@@ -88,6 +88,23 @@ export async function revokeShareLink(id) {
 }
 
 /**
+ * Record a view on a share link — increments view_count and sets last_viewed_at.
+ * Called from the public ShareView page when a valid link is opened.
+ *
+ * @param {string} id - UUID of the share_links row
+ * @param {number} currentCount - current view_count value from the fetched row
+ */
+export async function recordShareLinkView(id, currentCount = 0) {
+  await supabase
+    .from('share_links')
+    .update({
+      view_count: currentCount + 1,
+      last_viewed_at: new Date().toISOString(),
+    })
+    .eq('id', id);
+}
+
+/**
  * List all active (non-revoked, non-expired) share links for a record.
  *
  * @param {string} recordId - UUID of the record

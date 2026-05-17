@@ -476,34 +476,63 @@ function SharePanel({ record, userId, onClose }) {
             Active links ({activeLinks.length})
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {activeLinks.map(link => (
-              <div key={link.id} style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '10px 14px', gap: '12px',
-              }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: '12px', fontFamily: 'monospace', color: '#374151', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    …{link.token.slice(-12)}
+            {activeLinks.map(link => {
+              const views = link.view_count || 0;
+              const lastViewed = link.last_viewed_at
+                ? new Date(link.last_viewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+                : null;
+              return (
+                <div key={link.id} style={{
+                  background: 'white', border: '1px solid #e5e7eb',
+                  borderRadius: '8px', padding: '10px 14px',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '12px', fontFamily: 'monospace', color: '#374151', marginBottom: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        …{link.token.slice(-12)}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#9ca3af' }}>
+                        Expires {formatShortExpiry(link.expires_at)}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleRevoke(link.id)}
+                      disabled={revoking[link.id]}
+                      style={{
+                        padding: '5px 12px', borderRadius: '6px', border: '1px solid #fca5a5',
+                        background: revoking[link.id] ? '#f9fafb' : '#fff5f5',
+                        color: '#dc2626', fontSize: '12px', fontWeight: '600',
+                        cursor: revoking[link.id] ? 'not-allowed' : 'pointer',
+                        fontFamily: FONT, flexShrink: 0, transition: 'all 0.15s',
+                      }}
+                    >
+                      {revoking[link.id] ? '…' : 'Revoke'}
+                    </button>
                   </div>
-                  <div style={{ fontSize: '11px', color: '#9ca3af' }}>
-                    Expires {formatShortExpiry(link.expires_at)}
+
+                  {/* View stats */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '12px',
+                    marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #f3f4f6',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={views > 0 ? T : '#d1d5db'} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                      <span style={{ fontSize: '11px', fontWeight: '600', color: views > 0 ? T : '#d1d5db' }}>
+                        {views === 0 ? 'Not opened yet' : `${views} ${views === 1 ? 'view' : 'views'}`}
+                      </span>
+                    </div>
+                    {lastViewed && (
+                      <span style={{ fontSize: '11px', color: '#9ca3af' }}>
+                        Last opened {lastViewed}
+                      </span>
+                    )}
                   </div>
                 </div>
-                <button
-                  onClick={() => handleRevoke(link.id)}
-                  disabled={revoking[link.id]}
-                  style={{
-                    padding: '5px 12px', borderRadius: '6px', border: '1px solid #fca5a5',
-                    background: revoking[link.id] ? '#f9fafb' : '#fff5f5',
-                    color: '#dc2626', fontSize: '12px', fontWeight: '600',
-                    cursor: revoking[link.id] ? 'not-allowed' : 'pointer',
-                    fontFamily: FONT, flexShrink: 0, transition: 'all 0.15s',
-                  }}
-                >
-                  {revoking[link.id] ? '…' : 'Revoke'}
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

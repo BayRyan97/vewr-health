@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { getShareLink } from '../lib/shareLinks';
+import { getShareLink, recordShareLinkView } from '../lib/shareLinks';
 import { decryptFile } from '../lib/webCryptoEncryption';
 
 const T = '#00A19C';
@@ -76,6 +76,8 @@ export default function ShareView() {
         setLink(l);
         setIsImage(l.file_type?.startsWith('image/'));
         setStatus('valid');
+        // Record the view — fire and forget
+        recordShareLinkView(l.id, l.view_count || 0);
       }
     }
     load();
