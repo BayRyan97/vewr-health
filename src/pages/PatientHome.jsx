@@ -614,10 +614,16 @@ function RecordsList({ records, onDelete, userId = '' }) {
         .del-confirm:hover { background: #dc2626 !important; color: white !important; }
       `}</style>
       {records.map(record => {
-        const name = record.metadata?.originalFileName || 'Medical Record';
-        const date = new Date(record.uploadedAt).toLocaleDateString('en-US', {
+        const name = record.metadata?.recordName || record.metadata?.originalFileName || 'Medical Record';
+        const recordDate = record.metadata?.recordDate
+          ? new Date(record.metadata.recordDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : null;
+        const uploadedDate = new Date(record.uploadedAt).toLocaleDateString('en-US', {
           month: 'short', day: 'numeric', year: 'numeric',
         });
+        const date = recordDate || uploadedDate;
+        const dateLabel = recordDate ? 'Record date' : 'Uploaded';
+        const notes = record.metadata?.recordNotes || null;
         const size = record.metadata?.originalFileSize
           ? `${(record.metadata.originalFileSize / 1024).toFixed(1)} KB`
           : '';
@@ -658,8 +664,17 @@ function RecordsList({ records, onDelete, userId = '' }) {
                     {name}
                   </div>
                   <div style={{ fontSize: '12px', color: '#9ca3af' }}>
-                    {date}{size ? ` · ${size}` : ''}
+                    {dateLabel}: {date}{size ? ` · ${size}` : ''}
                   </div>
+                  {notes && (
+                    <div style={{
+                      fontSize: '12px', color: '#6b7280', marginTop: '3px',
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      maxWidth: '320px',
+                    }}>
+                      {notes}
+                    </div>
+                  )}
                 </div>
               </div>
 

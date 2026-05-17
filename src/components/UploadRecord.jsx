@@ -5,6 +5,14 @@ const T = '#00A19C';
 const T_DARK = '#007F7B';
 const FONT = '"Gotham SSm A", "Gotham SSm B", system-ui, -apple-system, sans-serif';
 
+const inputStyle = {
+  width: '100%', padding: '10px 14px',
+  border: '1px solid #e5e7eb', borderRadius: '9px',
+  fontSize: '14px', color: '#111827', background: 'white',
+  fontFamily: FONT, outline: 'none', boxSizing: 'border-box',
+  transition: 'border-color 0.15s',
+};
+
 function UploadRecord({ onUploadSuccess }) {
   const [file, setFile] = useState(null);
   const [stage, setStage] = useState('idle'); // idle | encrypting | uploading | done | error
@@ -13,8 +21,12 @@ function UploadRecord({ onUploadSuccess }) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef(null);
 
-  const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+  // User-provided metadata
+  const [recordName, setRecordName] = useState('');
+  const [recordDate, setRecordDate] = useState('');
+  const [recordNotes, setRecordNotes] = useState('');
 
+  const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
   const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
 
   const handleFile = (f) => {
@@ -78,7 +90,14 @@ function UploadRecord({ onUploadSuccess }) {
       const uploadedCid = data.IpfsHash;
       if (!uploadedCid) throw new Error('No CID returned from Pinata');
 
-      const fullMetadata = { ...metadata, ipfsCid: uploadedCid };
+      const fullMetadata = {
+        ...metadata,
+        ipfsCid: uploadedCid,
+        recordName: recordName.trim() || null,
+        recordDate: recordDate || null,
+        recordNotes: recordNotes.trim() || null,
+      };
+
       setCid(uploadedCid);
       setStage('done');
 
@@ -102,6 +121,9 @@ function UploadRecord({ onUploadSuccess }) {
     setStage('idle');
     setCid(null);
     setErrorMsg('');
+    setRecordName('');
+    setRecordDate('');
+    setRecordNotes('');
     if (inputRef.current) inputRef.current.value = '';
   };
 
@@ -135,7 +157,7 @@ function UploadRecord({ onUploadSuccess }) {
           onDrop={handleDrop}
           style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', padding: '52px 24px',
+            justifyContent: 'center', padding: '40px 24px',
             border: `2px dashed ${dragging ? T : file ? T + '60' : '#d1d5db'}`,
             borderRadius: '12px', cursor: busy ? 'default' : 'pointer',
             background: dragging ? `${T}08` : file ? '#f0fdfb' : '#fafafa',
@@ -146,18 +168,18 @@ function UploadRecord({ onUploadSuccess }) {
           {!file ? (
             <>
               <div style={{
-                width: '56px', height: '56px', borderRadius: '14px',
+                width: '52px', height: '52px', borderRadius: '13px',
                 background: '#f0fdfb', border: `1px solid ${T}30`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                marginBottom: '16px',
+                marginBottom: '14px',
               }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2" strokeLinecap="round">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2" strokeLinecap="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                   <polyline points="17 8 12 3 7 8" />
                   <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
               </div>
-              <p style={{ margin: '0 0 6px 0', fontSize: '15px', fontWeight: '600', color: '#111827' }}>
+              <p style={{ margin: '0 0 5px 0', fontSize: '15px', fontWeight: '600', color: '#111827' }}>
                 {dragging ? 'Drop it here' : 'Click or drag to upload'}
               </p>
               <p style={{ margin: 0, fontSize: '13px', color: '#9ca3af' }}>
@@ -167,12 +189,12 @@ function UploadRecord({ onUploadSuccess }) {
           ) : (
             <>
               <div style={{
-                width: '56px', height: '56px', borderRadius: '14px',
+                width: '52px', height: '52px', borderRadius: '13px',
                 background: '#f0fdfb', border: `1px solid ${T}50`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                marginBottom: '16px',
+                marginBottom: '14px',
               }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                   <polyline points="14 2 14 8 20 8" />
                 </svg>
@@ -182,7 +204,14 @@ function UploadRecord({ onUploadSuccess }) {
               </p>
               <p style={{ margin: 0, fontSize: '13px', color: '#9ca3af' }}>
                 {(file.size / 1024).toFixed(1)} KB
-                {!busy && <span style={{ color: T, marginLeft: '8px', cursor: 'pointer' }} onClick={e => { e.stopPropagation(); reset(); }}>× Remove</span>}
+                {!busy && (
+                  <span
+                    style={{ color: T, marginLeft: '8px', cursor: 'pointer' }}
+                    onClick={e => { e.stopPropagation(); reset(); }}
+                  >
+                    × Remove
+                  </span>
+                )}
               </p>
             </>
           )}
@@ -196,12 +225,74 @@ function UploadRecord({ onUploadSuccess }) {
           style={{ display: 'none' }}
         />
 
+        {/* Metadata fields — shown once a file is selected */}
+        {file && stage !== 'done' && (
+          <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{
+              fontSize: '12px', fontWeight: '600', color: '#6b7280',
+              textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px',
+            }}>
+              Record details <span style={{ color: '#d1d5db', fontWeight: '400', textTransform: 'none', letterSpacing: 0 }}>— optional</span>
+            </div>
+
+            {/* Name */}
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '5px' }}>
+                Record name
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Blood test, MRI scan, Vaccination"
+                value={recordName}
+                onChange={e => setRecordName(e.target.value)}
+                disabled={busy}
+                style={inputStyle}
+                onFocus={e => e.target.style.borderColor = T}
+                onBlur={e => e.target.style.borderColor = '#e5e7eb'}
+              />
+            </div>
+
+            {/* Date */}
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '5px' }}>
+                Date of record
+              </label>
+              <input
+                type="date"
+                value={recordDate}
+                onChange={e => setRecordDate(e.target.value)}
+                disabled={busy}
+                style={inputStyle}
+                onFocus={e => e.target.style.borderColor = T}
+                onBlur={e => e.target.style.borderColor = '#e5e7eb'}
+              />
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '5px' }}>
+                Notes
+              </label>
+              <textarea
+                placeholder="e.g. Follow-up required, fasting required before next test…"
+                value={recordNotes}
+                onChange={e => setRecordNotes(e.target.value)}
+                disabled={busy}
+                rows={3}
+                style={{
+                  ...inputStyle,
+                  resize: 'vertical', minHeight: '72px', lineHeight: '1.5',
+                }}
+                onFocus={e => e.target.style.borderColor = T}
+                onBlur={e => e.target.style.borderColor = '#e5e7eb'}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Progress steps */}
         {busy && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '0',
-            margin: '20px 0 0 0',
-          }}>
+          <div style={{ display: 'flex', alignItems: 'center', margin: '20px 0 0 0' }}>
             {[
               { id: 'encrypting', label: 'Encrypting' },
               { id: 'uploading', label: 'Uploading' },
