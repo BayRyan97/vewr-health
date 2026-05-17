@@ -10,6 +10,31 @@ const T_DARK = '#007F7B';
 const FONT = '"Gotham SSm A", "Gotham SSm B", system-ui, -apple-system, sans-serif';
 const PRIVY_CONFIGURED = !!process.env.REACT_APP_PRIVY_APP_ID;
 
+// ─── Record type taxonomy ─────────────────────────────────────────────────────
+export const RECORD_TYPES = [
+  { value: 'lab',          label: 'Lab Results',    color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
+  { value: 'imaging',      label: 'Imaging',         color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe' },
+  { value: 'vaccination',  label: 'Vaccination',     color: '#059669', bg: '#ecfdf5', border: '#6ee7b7' },
+  { value: 'prescription', label: 'Prescription',    color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+  { value: 'visit',        label: 'Visit Summary',   color: T,         bg: '#f0fdfb', border: '#99f6e4' },
+  { value: 'other',        label: 'Other',           color: '#6b7280', bg: '#f9fafb', border: '#e5e7eb' },
+];
+
+function getRecordType(value) {
+  return RECORD_TYPES.find(t => t.value === value) || null;
+}
+
+// ─── Window width hook (mobile detection) ────────────────────────────────────
+function useWindowWidth() {
+  const [width, setWidth] = useState(window.innerWidth);
+  useEffect(() => {
+    const handle = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', handle);
+    return () => window.removeEventListener('resize', handle);
+  }, []);
+  return width;
+}
+
 // ─── Analytics helper ─────────────────────────────────────────────────────────
 function track(eventName, params = {}) {
   if (typeof window.gtag === 'function') {
@@ -572,14 +597,17 @@ function SharePanel({ record, userId, onClose }) {
 }
 
 function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
-  const [downloading, setDownloading] = useState({}); // { [recordId]: 'fetching' | 'decrypting' | null }
+  const [downloading, setDownloading] = useState({});
   const [dlError, setDlError] = useState({});
-  const [confirmDelete, setConfirmDelete] = useState(null); // record id awaiting confirmation
-  const [deleting, setDeleting] = useState({}); // { [recordId]: true }
-  const [shareOpen, setShareOpen] = useState(null); // record id with share panel open
-  const [editOpen, setEditOpen] = useState(null); // record id with edit panel open
-  const [editFields, setEditFields] = useState({}); // { [recordId]: { recordName, recordDate, recordNotes } }
-  const [saving, setSaving] = useState({}); // { [recordId]: true }
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [deleting, setDeleting] = useState({});
+  const [shareOpen, setShareOpen] = useState(null);
+  const [editOpen, setEditOpen] = useState(null);
+  const [editFields, setEditFields] = useState({});
+  const [saving, setSaving] = useState({});
+  const [search, setSearch] = useState('');
+  const [filterType, setFilterType] = useState(null); // null = all
+  const isMobile = useWindowWidth() < 640;
 
   const handleDownload = async (record) => {
     const { id, cid, metadata } = record;
@@ -647,6 +675,7 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
         recordName: record.metadata?.recordName || '',
         recordDate: record.metadata?.recordDate || '',
         recordNotes: record.metadata?.recordNotes || '',
+        recordType: record.metadata?.recordType || null,
       },
     }));
     setShareOpen(null);
@@ -658,9 +687,10 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
     setSaving(prev => ({ ...prev, [record.id]: true }));
     const updatedMetadata = {
       ...record.metadata,
-      recordName: fields.recordName.trim() || null,
+      recordName: fields.recordName?.trim() || null,
       recordDate: fields.recordDate || null,
-      recordNotes: fields.recordNotes.trim() || null,
+      recordNotes: fields.recordNotes?.trim() || null,
+      recordType: fields.recordType !== undefined ? fields.recordType : (record.metadata?.recordType || null),
     };
     if (isSupabaseConfigured) {
       await supabase.from('records').update({ metadata: updatedMetadata }).eq('id', record.id);
@@ -697,6 +727,18 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
     );
   }
 
+  // Filtered + searched records
+  const visibleRecords = records.filter(r => {
+    const name = r.metadata?.recordName || r.metadata?.originalFileName || '';
+    const notes = r.metadata?.recordNotes || '';
+    const matchesSearch = !search || name.toLowerCase().includes(search.toLowerCase()) || notes.toLowerCase().includes(search.toLowerCase());
+    const matchesType = !filterType || r.metadata?.recordType === filterType;
+    return matchesSearch && matchesType;
+  });
+
+  // Which types actually exist in the list
+  const presentTypes = RECORD_TYPES.filter(t => records.some(r => r.metadata?.recordType === t.value));
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <style>{`
@@ -708,9 +750,83 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
         .edit-btn-active { background: #f3f4f6 !important; border-color: #9ca3af !important; color: #111827 !important; }
         .del-btn:hover { background: #fef2f2 !important; border-color: #fca5a5 !important; color: #dc2626 !important; }
         .del-confirm:hover { background: #dc2626 !important; color: white !important; }
+        .filter-pill:hover { border-color: #9ca3af !important; color: #374151 !important; }
       `}</style>
-      {records.map(record => {
+
+      {/* Search + filter — shown when 10+ records OR any type tags exist */}
+      {(records.length >= 10 || presentTypes.length > 0) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '4px' }}>
+          {/* Search */}
+          <div style={{ position: 'relative' }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.2" strokeLinecap="round" style={{ position: 'absolute', left: '13px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search records…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{
+                width: '100%', padding: '10px 14px 10px 38px',
+                border: '1px solid #e5e7eb', borderRadius: '10px',
+                fontSize: '14px', color: '#111827', background: 'white',
+                fontFamily: FONT, outline: 'none', boxSizing: 'border-box',
+              }}
+              onFocus={e => e.target.style.borderColor = T}
+              onBlur={e => e.target.style.borderColor = '#e5e7eb'}
+            />
+            {search && (
+              <button onClick={() => setSearch('')} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '16px', lineHeight: 1, padding: '2px' }}>×</button>
+            )}
+          </div>
+
+          {/* Type filter pills — only shown if any records have tags */}
+          {presentTypes.length > 0 && (
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              <button
+                className="filter-pill"
+                onClick={() => setFilterType(null)}
+                style={{
+                  padding: '5px 13px', borderRadius: '100px', border: `1px solid ${!filterType ? T : '#e5e7eb'}`,
+                  background: !filterType ? T : 'white', color: !filterType ? 'white' : '#6b7280',
+                  fontSize: '12px', fontWeight: '500', cursor: 'pointer', fontFamily: FONT, transition: 'all 0.15s',
+                }}
+              >
+                All
+              </button>
+              {presentTypes.map(t => (
+                <button
+                  key={t.value}
+                  className="filter-pill"
+                  onClick={() => setFilterType(filterType === t.value ? null : t.value)}
+                  style={{
+                    padding: '5px 13px', borderRadius: '100px',
+                    border: `1px solid ${filterType === t.value ? t.color : '#e5e7eb'}`,
+                    background: filterType === t.value ? t.bg : 'white',
+                    color: filterType === t.value ? t.color : '#6b7280',
+                    fontSize: '12px', fontWeight: filterType === t.value ? '600' : '500',
+                    cursor: 'pointer', fontFamily: FONT, transition: 'all 0.15s',
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* No results state */}
+      {visibleRecords.length === 0 && (
+        <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '40px 24px', textAlign: 'center' }}>
+          <p style={{ color: '#9ca3af', fontSize: '14px', margin: 0 }}>No records match your search.</p>
+          <button onClick={() => { setSearch(''); setFilterType(null); }} style={{ marginTop: '10px', background: 'none', border: 'none', color: T, fontSize: '13px', cursor: 'pointer', fontFamily: FONT }}>Clear filters</button>
+        </div>
+      )}
+
+      {visibleRecords.map(record => {
         const name = record.metadata?.recordName || record.metadata?.originalFileName || 'Medical Record';
+        const recordType = getRecordType(record.metadata?.recordType);
         const recordDate = record.metadata?.recordDate
           ? new Date(record.metadata.recordDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
           : null;
@@ -741,26 +857,34 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
               transition: 'border-color 0.2s',
             }}>
               {/* Top row: file info + action buttons */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', gap: '12px', flexDirection: isMobile ? 'column' : 'row' }}>
               {/* Left: file info */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, width: isMobile ? '100%' : undefined }}>
                 <div style={{
                   width: '38px', height: '38px', borderRadius: '9px',
-                  background: '#f0fdfb', border: `1px solid ${T}25`,
+                  background: recordType ? recordType.bg : '#f0fdfb',
+                  border: `1px solid ${recordType ? recordType.border : `${T}25`}`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                 }}>
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={recordType ? recordType.color : T} strokeWidth="2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                     <polyline points="14 2 14 8 20 8" />
                   </svg>
                 </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{
-                    fontWeight: '600', color: '#111827', fontSize: '14px',
-                    marginBottom: '2px', whiteSpace: 'nowrap',
-                    overflow: 'hidden', textOverflow: 'ellipsis',
-                  }}>
-                    {name}
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '2px', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: '600', color: '#111827', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {name}
+                    </span>
+                    {recordType && (
+                      <span style={{
+                        fontSize: '11px', fontWeight: '600', padding: '1px 8px', borderRadius: '100px',
+                        background: recordType.bg, color: recordType.color, border: `1px solid ${recordType.border}`,
+                        whiteSpace: 'nowrap', flexShrink: 0,
+                      }}>
+                        {recordType.label}
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: '12px', color: '#9ca3af' }}>
                     {dateLabel}: {date}{size ? ` · ${size}` : ''}
@@ -769,7 +893,6 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
                     <div style={{
                       fontSize: '12px', color: '#6b7280', marginTop: '3px',
                       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                      maxWidth: '320px',
                     }}>
                       {notes}
                     </div>
@@ -778,7 +901,7 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
               </div>
 
               {/* Right: action buttons */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, width: isMobile ? '100%' : undefined, justifyContent: isMobile ? 'flex-end' : undefined }}>
 
                 {/* Share button */}
                 {isSupabaseConfigured && (
@@ -788,20 +911,20 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
                     disabled={isDeletingThis}
                     title="Share record"
                     style={{
-                      display: 'flex', alignItems: 'center', gap: '5px',
-                      padding: '7px 12px', borderRadius: '8px',
+                      display: 'flex', alignItems: 'center', gap: isMobile ? '0' : '5px',
+                      padding: isMobile ? '8px' : '7px 12px', borderRadius: '8px',
                       border: '1px solid #e5e7eb', background: 'white',
                       color: '#374151', fontSize: '13px', fontWeight: '500',
                       cursor: isDeletingThis ? 'not-allowed' : 'pointer',
                       fontFamily: FONT, transition: 'all 0.15s',
                     }}
                   >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
                       <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
                       <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
                     </svg>
-                    Share
+                    {!isMobile && 'Share'}
                   </button>
                 )}
 
@@ -812,19 +935,19 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
                   disabled={isDeletingThis}
                   title="Edit record details"
                   style={{
-                    display: 'flex', alignItems: 'center', gap: '5px',
-                    padding: '7px 12px', borderRadius: '8px',
+                    display: 'flex', alignItems: 'center', gap: isMobile ? '0' : '5px',
+                    padding: isMobile ? '8px' : '7px 12px', borderRadius: '8px',
                     border: '1px solid #e5e7eb', background: 'white',
                     color: '#9ca3af', fontSize: '13px', fontWeight: '500',
                     cursor: isDeletingThis ? 'not-allowed' : 'pointer',
                     fontFamily: FONT, transition: 'all 0.15s',
                   }}
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                   </svg>
-                  Edit
+                  {!isMobile && 'Edit'}
                 </button>
 
                 {/* Download button */}
@@ -832,9 +955,10 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
                   className="dl-btn"
                   onClick={() => handleDownload(record)}
                   disabled={!!dlState || isDeletingThis}
+                  title="Download"
                   style={{
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                    padding: '7px 14px', borderRadius: '8px',
+                    display: 'flex', alignItems: 'center', gap: isMobile ? '0' : '6px',
+                    padding: isMobile ? '8px' : '7px 14px', borderRadius: '8px',
                     border: '1px solid #e5e7eb', background: 'white',
                     color: '#374151', fontSize: '13px', fontWeight: '500',
                     cursor: (dlState || isDeletingThis) ? 'not-allowed' : 'pointer',
@@ -843,22 +967,19 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
                   }}
                 >
                   {dlState ? (
-                    <>
-                      <div style={{
-                        width: '12px', height: '12px', borderRadius: '50%',
-                        border: `2px solid ${T}`, borderTopColor: 'transparent',
-                        animation: 'spin 0.7s linear infinite', flexShrink: 0,
-                      }} />
-                      {dlState === 'fetching' ? 'Fetching…' : 'Decrypting…'}
-                    </>
+                    <div style={{
+                      width: '14px', height: '14px', borderRadius: '50%',
+                      border: `2px solid ${T}`, borderTopColor: 'transparent',
+                      animation: 'spin 0.7s linear infinite',
+                    }} />
                   ) : (
                     <>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                         <polyline points="7 10 12 15 17 10" />
                         <line x1="12" y1="15" x2="12" y2="3" />
                       </svg>
-                      Download
+                      {!isMobile && (dlState === 'fetching' ? 'Fetching…' : dlState === 'decrypting' ? 'Decrypting…' : 'Download')}
                     </>
                   )}
                 </button>
@@ -970,6 +1091,31 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {/* Type */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '7px' }}>Record type</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {RECORD_TYPES.map(t => {
+                        const active = (ef.recordType || record.metadata?.recordType) === t.value;
+                        return (
+                          <button
+                            key={t.value}
+                            onClick={() => setEditFields(prev => ({ ...prev, [record.id]: { ...prev[record.id], recordType: active ? null : t.value } }))}
+                            disabled={isSaving}
+                            style={{
+                              padding: '5px 13px', borderRadius: '100px', border: `1px solid ${active ? t.color : '#e5e7eb'}`,
+                              background: active ? t.bg : 'white', color: active ? t.color : '#6b7280',
+                              fontSize: '12px', fontWeight: active ? '600' : '400', cursor: 'pointer',
+                              fontFamily: FONT, transition: 'all 0.15s',
+                            }}
+                          >
+                            {t.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* Name */}
                   <div>
                     <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '5px' }}>Record name</label>

@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { encryptFile } from '../lib/webCryptoEncryption';
+import { RECORD_TYPES } from '../pages/PatientHome';
 
 const T = '#00A19C';
 const T_DARK = '#007F7B';
@@ -22,6 +23,7 @@ function UploadRecord({ onUploadSuccess }) {
   const inputRef = useRef(null);
 
   // User-provided metadata
+  const [recordType, setRecordType] = useState(null);
   const [recordName, setRecordName] = useState('');
   const [recordDate, setRecordDate] = useState('');
   const [recordNotes, setRecordNotes] = useState('');
@@ -93,6 +95,7 @@ function UploadRecord({ onUploadSuccess }) {
       const fullMetadata = {
         ...metadata,
         ipfsCid: uploadedCid,
+        recordType: recordType || null,
         recordName: recordName.trim() || null,
         recordDate: recordDate || null,
         recordNotes: recordNotes.trim() || null,
@@ -121,6 +124,7 @@ function UploadRecord({ onUploadSuccess }) {
     setStage('idle');
     setCid(null);
     setErrorMsg('');
+    setRecordType(null);
     setRecordName('');
     setRecordDate('');
     setRecordNotes('');
@@ -233,6 +237,37 @@ function UploadRecord({ onUploadSuccess }) {
               textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px',
             }}>
               Record details <span style={{ color: '#d1d5db', fontWeight: '400', textTransform: 'none', letterSpacing: 0 }}>— optional</span>
+            </div>
+
+            {/* Type */}
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '7px' }}>
+                Record type
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {RECORD_TYPES.map(t => {
+                  const active = recordType === t.value;
+                  return (
+                    <button
+                      key={t.value}
+                      type="button"
+                      onClick={() => setRecordType(active ? null : t.value)}
+                      disabled={busy}
+                      style={{
+                        padding: '6px 14px', borderRadius: '100px',
+                        border: `1px solid ${active ? t.color : '#e5e7eb'}`,
+                        background: active ? t.bg : 'white',
+                        color: active ? t.color : '#6b7280',
+                        fontSize: '13px', fontWeight: active ? '600' : '400',
+                        cursor: busy ? 'not-allowed' : 'pointer',
+                        fontFamily: FONT, transition: 'all 0.15s',
+                      }}
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Name */}
