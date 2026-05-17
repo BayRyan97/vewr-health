@@ -674,6 +674,31 @@ function RecordsList({ records, onDelete, userId = '' }) {
                   🔐 Encrypted
                 </span>
 
+                {/* IPFS verification link */}
+                <a
+                  href={`https://ipfs.io/ipfs/${record.cid}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="View raw encrypted file on IPFS"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '4px',
+                    padding: '7px 11px', borderRadius: '8px',
+                    border: '1px solid #e5e7eb', background: 'white',
+                    color: '#9ca3af', fontSize: '12px', fontWeight: '500',
+                    textDecoration: 'none', transition: 'all 0.15s',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = T; e.currentTarget.style.borderColor = T; e.currentTarget.style.background = '#f0fdfb'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = '#9ca3af'; e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.background = 'white'; }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <polyline points="15 3 21 3 21 9" />
+                    <line x1="10" y1="14" x2="21" y2="3" />
+                  </svg>
+                  IPFS
+                </a>
+
                 {/* Share button */}
                 {isSupabaseConfigured && (
                   <button
@@ -902,7 +927,6 @@ function Dashboard({ userEmail, userId, onLogout }) {
       } catch (e) {}
     }
     track('record_uploaded', { file_type: record.metadata?.originalFileType });
-    setActiveTab('records');
   };
 
   return (

@@ -298,7 +298,7 @@ function UploadRecord({ onUploadSuccess }) {
               </div>
             </div>
 
-            <div style={{ marginBottom: '12px' }}>
+            <div style={{ marginBottom: '16px' }}>
               <div style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Content ID (CID)
               </div>
@@ -312,13 +312,34 @@ function UploadRecord({ onUploadSuccess }) {
               </div>
             </div>
 
+            <a
+              href={`https://ipfs.io/ipfs/${cid}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                width: '100%', padding: '11px 24px', marginBottom: '10px',
+                background: 'white', color: T,
+                border: `1px solid ${T}40`, borderRadius: '8px',
+                fontSize: '14px', fontWeight: '600', cursor: 'pointer',
+                fontFamily: FONT, textDecoration: 'none', boxSizing: 'border-box',
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+              Verify encryption on IPFS
+            </a>
+
             <button
               onClick={reset}
               style={{
                 width: '100%', padding: '11px 24px',
-                background: 'white', color: T,
-                border: `1px solid ${T}40`, borderRadius: '8px',
-                fontSize: '14px', fontWeight: '600', cursor: 'pointer',
+                background: 'transparent', color: '#6b7280',
+                border: '1px solid #e5e7eb', borderRadius: '8px',
+                fontSize: '14px', fontWeight: '500', cursor: 'pointer',
                 fontFamily: FONT,
               }}
             >
