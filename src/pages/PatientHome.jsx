@@ -224,6 +224,7 @@ function SharePanel({ record, userId, onClose }) {
   const [loadingLinks, setLoadingLinks] = useState(true);
   const [revoking, setRevoking] = useState({});
   const [shareError, setShareError] = useState('');
+  const [copiedLink, setCopiedLink] = useState(null); // link id that was just copied
 
   const loadLinks = useCallback(async () => {
     setLoadingLinks(true);
@@ -283,6 +284,14 @@ function SharePanel({ record, userId, onClose }) {
     track('share_link_revoked');
     await loadLinks();
     setRevoking(prev => ({ ...prev, [linkId]: false }));
+  };
+
+  const handleCopyLink = (link) => {
+    const url = `${window.location.origin}/share/${link.token}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedLink(link.id);
+      setTimeout(() => setCopiedLink(id => id === link.id ? null : id), 2000);
+    });
   };
 
   const formatShortExpiry = (dateStr) => {
@@ -481,52 +490,74 @@ function SharePanel({ record, userId, onClose }) {
               const lastViewed = link.last_viewed_at
                 ? new Date(link.last_viewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
                 : null;
+              const isCopied = copiedLink === link.id;
+
               return (
                 <div key={link.id} style={{
                   background: 'white', border: '1px solid #e5e7eb',
-                  borderRadius: '8px', padding: '10px 14px',
+                  borderRadius: '8px', padding: '12px 14px',
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: '12px', fontFamily: 'monospace', color: '#374151', marginBottom: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        …{link.token.slice(-12)}
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#9ca3af' }}>
-                        Expires {formatShortExpiry(link.expires_at)}
-                      </div>
+                  {/* Top: expiry + actions */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '10px' }}>
+                    <div style={{ fontSize: '11px', color: '#9ca3af' }}>
+                      Expires {formatShortExpiry(link.expires_at)}
                     </div>
-                    <button
-                      onClick={() => handleRevoke(link.id)}
-                      disabled={revoking[link.id]}
-                      style={{
-                        padding: '5px 12px', borderRadius: '6px', border: '1px solid #fca5a5',
-                        background: revoking[link.id] ? '#f9fafb' : '#fff5f5',
-                        color: '#dc2626', fontSize: '12px', fontWeight: '600',
-                        cursor: revoking[link.id] ? 'not-allowed' : 'pointer',
-                        fontFamily: FONT, flexShrink: 0, transition: 'all 0.15s',
-                      }}
-                    >
-                      {revoking[link.id] ? '…' : 'Revoke'}
-                    </button>
+                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                      <button
+                        onClick={() => handleCopyLink(link)}
+                        style={{
+                          padding: '4px 11px', borderRadius: '6px',
+                          border: `1px solid ${isCopied ? T : '#e5e7eb'}`,
+                          background: isCopied ? `${T}12` : 'white',
+                          color: isCopied ? T : '#374151',
+                          fontSize: '12px', fontWeight: '600',
+                          cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s',
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                        }}
+                      >
+                        {isCopied ? (
+                          <>✓ Copied</>
+                        ) : (
+                          <>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                            </svg>
+                            Copy link
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleRevoke(link.id)}
+                        disabled={revoking[link.id]}
+                        style={{
+                          padding: '4px 11px', borderRadius: '6px', border: '1px solid #fca5a5',
+                          background: revoking[link.id] ? '#f9fafb' : '#fff5f5',
+                          color: '#dc2626', fontSize: '12px', fontWeight: '600',
+                          cursor: revoking[link.id] ? 'not-allowed' : 'pointer',
+                          fontFamily: FONT, transition: 'all 0.15s',
+                        }}
+                      >
+                        {revoking[link.id] ? '…' : 'Revoke'}
+                      </button>
+                    </div>
                   </div>
 
-                  {/* View stats */}
+                  {/* Bottom: view stats */}
                   <div style={{
-                    display: 'flex', alignItems: 'center', gap: '12px',
-                    marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #f3f4f6',
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                    paddingTop: '8px', borderTop: '1px solid #f3f4f6',
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={views > 0 ? T : '#d1d5db'} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </svg>
-                      <span style={{ fontSize: '11px', fontWeight: '600', color: views > 0 ? T : '#d1d5db' }}>
-                        {views === 0 ? 'Not opened yet' : `${views} ${views === 1 ? 'view' : 'views'}`}
-                      </span>
-                    </div>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={views > 0 ? T : '#d1d5db'} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    <span style={{ fontSize: '11px', fontWeight: '600', color: views > 0 ? T : '#9ca3af' }}>
+                      {views === 0 ? 'Not opened yet' : `Opened ${views} ${views === 1 ? 'time' : 'times'}`}
+                    </span>
                     {lastViewed && (
                       <span style={{ fontSize: '11px', color: '#9ca3af' }}>
-                        Last opened {lastViewed}
+                        · Last opened {lastViewed}
                       </span>
                     )}
                   </div>
