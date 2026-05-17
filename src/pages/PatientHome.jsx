@@ -3,7 +3,7 @@ import { usePrivy } from '@privy-io/react-auth';
 import UploadRecord from '../components/UploadRecord';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { decryptFile } from '../lib/webCryptoEncryption';
-import { createShareLink, getShareLinksForRecord, revokeShareLink } from '../lib/shareLinks';
+import { createShareLink, getShareLinksForRecord, revokeShareLink, getAllShareLinksForUser } from '../lib/shareLinks';
 
 const T = '#00A19C';
 const T_DARK = '#007F7B';
@@ -1220,6 +1220,239 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
   );
 }
 
+// ─── Links Tab ────────────────────────────────────────────────────────────────
+function LinksTab({ userId }) {
+  const [links, setLinks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [revoking, setRevoking] = useState({});
+  const [copied, setCopied] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await getAllShareLinksForUser(userId);
+    setLinks(data || []);
+    setLoading(false);
+  }, [userId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleRevoke = async (linkId) => {
+    setRevoking(prev => ({ ...prev, [linkId]: true }));
+    await revokeShareLink(linkId);
+    track('share_link_revoked', { source: 'links_tab' });
+    await load();
+    setRevoking(prev => ({ ...prev, [linkId]: false }));
+  };
+
+  const handleCopy = (link) => {
+    const url = `${window.location.origin}/share/${link.token}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(link.id);
+      setTimeout(() => setCopied(id => id === link.id ? null : id), 2000);
+    });
+  };
+
+  const formatExpiry = (dateStr) => {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = d - now;
+    const diffHours = diffMs / (1000 * 60 * 60);
+    if (diffHours < 24) return `Expires in ${Math.round(diffHours)}h`;
+    const diffDays = Math.round(diffHours / 24);
+    if (diffDays === 1) return 'Expires tomorrow';
+    return `Expires ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  };
+
+  const formatLastViewed = (dateStr) => {
+    if (!dateStr) return null;
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  };
+
+  if (loading) {
+    return (
+      <div style={{
+        background: 'white', borderRadius: '16px', border: '1px solid #e5e7eb',
+        padding: '60px 32px', textAlign: 'center',
+      }}>
+        <div style={{
+          width: '20px', height: '20px', borderRadius: '50%',
+          border: `2px solid ${T}`, borderTopColor: 'transparent',
+          animation: 'spin 0.7s linear infinite', margin: '0 auto',
+        }} />
+      </div>
+    );
+  }
+
+  if (links.length === 0) {
+    return (
+      <div style={{
+        background: 'white', borderRadius: '16px', border: '1px solid #e5e7eb',
+        padding: '72px 32px', textAlign: 'center',
+      }}>
+        <div style={{
+          width: '64px', height: '64px', borderRadius: '16px',
+          background: '#f0fdfb', border: `1px solid ${T}30`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          margin: '0 auto 20px',
+        }}>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+          </svg>
+        </div>
+        <h3 style={{ color: '#111827', fontSize: '17px', fontWeight: '600', margin: '0 0 8px 0' }}>
+          No active share links
+        </h3>
+        <p style={{ color: '#9ca3af', fontSize: '14px', margin: 0, lineHeight: '1.6' }}>
+          Share links you create from your records will appear here.<br />
+          You can copy or revoke them any time.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+        <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>
+          {links.length} active {links.length === 1 ? 'link' : 'links'} · revoke any time to cut off access immediately
+        </p>
+        <button
+          onClick={load}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: '#9ca3af', fontSize: '12px', fontFamily: FONT,
+            display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 6px',
+            borderRadius: '6px', transition: 'color 0.15s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.color = T}
+          onMouseLeave={e => e.currentTarget.style.color = '#9ca3af'}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="23 4 23 10 17 10" />
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
+          Refresh
+        </button>
+      </div>
+
+      {links.map(link => {
+        const rt = getRecordType(link.record_type);
+        const views = link.view_count || 0;
+        const lastViewed = formatLastViewed(link.last_viewed_at);
+        const isCopied = copied === link.id;
+        const isRevoking = revoking[link.id];
+        const expiryLabel = formatExpiry(link.expires_at);
+        const isExpiringSoon = (new Date(link.expires_at) - new Date()) < 24 * 60 * 60 * 1000;
+
+        return (
+          <div key={link.id} style={{
+            background: 'white', borderRadius: '12px',
+            border: '1px solid #e5e7eb', padding: '16px 20px',
+            transition: 'border-color 0.15s',
+          }}>
+            {/* Top row: file info + actions */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+              {/* Left: icon + name + type */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
+                <div style={{
+                  width: '38px', height: '38px', borderRadius: '9px', flexShrink: 0,
+                  background: rt ? rt.bg : '#f0fdfb',
+                  border: `1px solid ${rt ? rt.border : `${T}25`}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={rt ? rt.color : T} strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap', marginBottom: '3px' }}>
+                    <span style={{ fontWeight: '600', color: '#111827', fontSize: '14px' }}>
+                      {link.file_name || 'Medical Record'}
+                    </span>
+                    {rt && (
+                      <span style={{
+                        fontSize: '11px', fontWeight: '600', padding: '1px 8px', borderRadius: '100px',
+                        background: rt.bg, color: rt.color, border: `1px solid ${rt.border}`,
+                        whiteSpace: 'nowrap', flexShrink: 0,
+                      }}>
+                        {rt.label}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{
+                      fontSize: '11px', fontWeight: '500',
+                      color: isExpiringSoon ? '#d97706' : '#9ca3af',
+                    }}>
+                      {isExpiringSoon && '⚠ '}{expiryLabel}
+                    </span>
+                    <span style={{ fontSize: '11px', color: '#e5e7eb' }}>·</span>
+                    <span style={{ fontSize: '11px', color: views > 0 ? T : '#9ca3af', fontWeight: views > 0 ? '600' : '400' }}>
+                      {views === 0 ? 'Not opened yet' : `Opened ${views} ${views === 1 ? 'time' : 'times'}`}
+                    </span>
+                    {lastViewed && (
+                      <>
+                        <span style={{ fontSize: '11px', color: '#e5e7eb' }}>·</span>
+                        <span style={{ fontSize: '11px', color: '#9ca3af' }}>Last opened {lastViewed}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: buttons */}
+              <div style={{ display: 'flex', gap: '6px', flexShrink: 0, alignItems: 'center' }}>
+                <button
+                  onClick={() => handleCopy(link)}
+                  style={{
+                    padding: '6px 12px', borderRadius: '7px',
+                    border: `1px solid ${isCopied ? T : '#e5e7eb'}`,
+                    background: isCopied ? `${T}12` : 'white',
+                    color: isCopied ? T : '#374151',
+                    fontSize: '12px', fontWeight: '600',
+                    cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s',
+                    display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {isCopied ? (
+                    <>✓ Copied</>
+                  ) : (
+                    <>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                      Copy link
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => handleRevoke(link.id)}
+                  disabled={isRevoking}
+                  style={{
+                    padding: '6px 12px', borderRadius: '7px',
+                    border: '1px solid #fca5a5',
+                    background: isRevoking ? '#f9fafb' : '#fff5f5',
+                    color: '#dc2626', fontSize: '12px', fontWeight: '600',
+                    cursor: isRevoking ? 'not-allowed' : 'pointer',
+                    fontFamily: FONT, transition: 'all 0.15s', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {isRevoking ? '…' : 'Revoke'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 function Dashboard({ userEmail, userId, onLogout }) {
   const [activeTab, setActiveTab] = useState('upload');
@@ -1463,6 +1696,7 @@ function Dashboard({ userEmail, userId, onLogout }) {
           {[
             { id: 'upload', label: 'Upload New' },
             { id: 'records', label: `My Records (${records.length})` },
+            { id: 'links', label: 'Share Links' },
           ].map(tab => (
             <button
               key={tab.id}
@@ -1490,6 +1724,7 @@ function Dashboard({ userEmail, userId, onLogout }) {
             userId={userId}
           />
         )}
+        {activeTab === 'links' && <LinksTab userId={userId} />}
       </div>
     </div>
   );

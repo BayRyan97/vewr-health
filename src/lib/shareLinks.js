@@ -22,7 +22,7 @@ export async function createShareLink(record, userId, expiryHours = 24) {
   const token = generateToken();
   const expiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000).toISOString();
 
-  const { encryptedKey, iv, originalFileName, originalFileType } = record.metadata || {};
+  const { encryptedKey, iv, originalFileName, originalFileType, recordName, recordType } = record.metadata || {};
 
   const { data, error } = await supabase
     .from('share_links')
@@ -35,8 +35,10 @@ export async function createShareLink(record, userId, expiryHours = 24) {
       cid: record.cid,
       encrypted_key: encryptedKey,
       iv,
-      file_name: originalFileName || 'Medical Record',
+      // Use user's custom name if set, fall back to original filename
+      file_name: recordName || originalFileName || 'Medical Record',
       file_type: originalFileType || 'application/octet-stream',
+      record_type: recordType || null,
     })
     .select()
     .single();
@@ -118,6 +120,26 @@ export async function getShareLinksForRecord(recordId, userId) {
     .from('share_links')
     .select('*')
     .eq('record_id', recordId)
+    .eq('user_id', userId)
+    .eq('revoked', false)
+    .gt('expires_at', now)
+    .order('created_at', { ascending: false });
+
+  return { data: data || [], error };
+}
+
+/**
+ * List all active (non-revoked, non-expired) share links for a user across all records.
+ *
+ * @param {string} userId - Privy user ID
+ * @returns {Promise<{ data: object[], error: object|null }>}
+ */
+export async function getAllShareLinksForUser(userId) {
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('share_links')
+    .select('*')
     .eq('user_id', userId)
     .eq('revoked', false)
     .gt('expires_at', now)
