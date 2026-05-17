@@ -511,12 +511,15 @@ function SharePanel({ record, userId, onClose }) {
   );
 }
 
-function RecordsList({ records, onDelete, userId = '' }) {
+function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
   const [downloading, setDownloading] = useState({}); // { [recordId]: 'fetching' | 'decrypting' | null }
   const [dlError, setDlError] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(null); // record id awaiting confirmation
   const [deleting, setDeleting] = useState({}); // { [recordId]: true }
   const [shareOpen, setShareOpen] = useState(null); // record id with share panel open
+  const [editOpen, setEditOpen] = useState(null); // record id with edit panel open
+  const [editFields, setEditFields] = useState({}); // { [recordId]: { recordName, recordDate, recordNotes } }
+  const [saving, setSaving] = useState({}); // { [recordId]: true }
 
   const handleDownload = async (record) => {
     const { id, cid, metadata } = record;
@@ -576,6 +579,37 @@ function RecordsList({ records, onDelete, userId = '' }) {
     setConfirmDelete(null);
   };
 
+  const openEdit = (record) => {
+    setEditOpen(record.id);
+    setEditFields(prev => ({
+      ...prev,
+      [record.id]: {
+        recordName: record.metadata?.recordName || '',
+        recordDate: record.metadata?.recordDate || '',
+        recordNotes: record.metadata?.recordNotes || '',
+      },
+    }));
+    setShareOpen(null);
+    setConfirmDelete(null);
+  };
+
+  const handleSaveEdit = async (record) => {
+    const fields = editFields[record.id] || {};
+    setSaving(prev => ({ ...prev, [record.id]: true }));
+    const updatedMetadata = {
+      ...record.metadata,
+      recordName: fields.recordName.trim() || null,
+      recordDate: fields.recordDate || null,
+      recordNotes: fields.recordNotes.trim() || null,
+    };
+    if (isSupabaseConfigured) {
+      await supabase.from('records').update({ metadata: updatedMetadata }).eq('id', record.id);
+    }
+    if (typeof onUpdate === 'function') onUpdate(record.id, updatedMetadata);
+    setSaving(prev => ({ ...prev, [record.id]: false }));
+    setEditOpen(null);
+  };
+
   if (records.length === 0) {
     return (
       <div style={{
@@ -610,6 +644,8 @@ function RecordsList({ records, onDelete, userId = '' }) {
         .dl-btn:hover { background: #f0fdfb !important; border-color: ${T} !important; color: ${T} !important; }
         .share-btn:hover { background: #f0fdfb !important; border-color: ${T} !important; color: ${T} !important; }
         .share-btn-active { background: ${T}12 !important; border-color: ${T} !important; color: ${T} !important; }
+        .edit-btn:hover { background: #f9fafb !important; border-color: #9ca3af !important; color: #374151 !important; }
+        .edit-btn-active { background: #f3f4f6 !important; border-color: #9ca3af !important; color: #111827 !important; }
         .del-btn:hover { background: #fef2f2 !important; border-color: #fca5a5 !important; color: #dc2626 !important; }
         .del-confirm:hover { background: #dc2626 !important; color: white !important; }
       `}</style>
@@ -632,12 +668,15 @@ function RecordsList({ records, onDelete, userId = '' }) {
         const isConfirming = confirmDelete === record.id;
         const isDeletingThis = deleting[record.id];
         const isShareOpen = shareOpen === record.id;
+        const isEditOpen = editOpen === record.id;
+        const isSaving = saving[record.id];
+        const ef = editFields[record.id] || {};
 
         return (
           <div key={record.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <div style={{
               background: 'white', borderRadius: '12px',
-              border: `1px solid ${isConfirming ? '#fca5a5' : isShareOpen ? `${T}40` : err ? '#fecaca' : '#e5e7eb'}`,
+              border: `1px solid ${isConfirming ? '#fca5a5' : isShareOpen || isEditOpen ? `${T}40` : err ? '#fecaca' : '#e5e7eb'}`,
               padding: '16px 20px',
               transition: 'border-color 0.2s',
             }}>
@@ -705,6 +744,28 @@ function RecordsList({ records, onDelete, userId = '' }) {
                     Share
                   </button>
                 )}
+
+                {/* Edit button */}
+                <button
+                  className={`edit-btn${isEditOpen ? ' edit-btn-active' : ''}`}
+                  onClick={() => isEditOpen ? setEditOpen(null) : openEdit(record)}
+                  disabled={isDeletingThis}
+                  title="Edit record details"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                    padding: '7px 12px', borderRadius: '8px',
+                    border: '1px solid #e5e7eb', background: 'white',
+                    color: '#9ca3af', fontSize: '13px', fontWeight: '500',
+                    cursor: isDeletingThis ? 'not-allowed' : 'pointer',
+                    fontFamily: FONT, transition: 'all 0.15s',
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                  Edit
+                </button>
 
                 {/* Download button */}
                 <button
@@ -829,6 +890,112 @@ function RecordsList({ records, onDelete, userId = '' }) {
                 userId={userId}
                 onClose={() => setShareOpen(null)}
               />
+            )}
+
+            {/* Edit panel */}
+            {isEditOpen && (
+              <div style={{
+                background: '#fafafa', border: '1px solid #e5e7eb',
+                borderRadius: '12px', padding: '20px 22px', marginTop: '4px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                    <span style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>Edit details</span>
+                  </div>
+                  <button onClick={() => setEditOpen(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '18px', lineHeight: 1, padding: '2px 4px' }}>×</button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {/* Name */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '5px' }}>Record name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Blood test, MRI scan"
+                      value={ef.recordName || ''}
+                      onChange={e => setEditFields(prev => ({ ...prev, [record.id]: { ...prev[record.id], recordName: e.target.value } }))}
+                      disabled={isSaving}
+                      style={{
+                        width: '100%', padding: '9px 13px', border: '1px solid #e5e7eb', borderRadius: '8px',
+                        fontSize: '14px', color: '#111827', background: 'white', fontFamily: FONT,
+                        outline: 'none', boxSizing: 'border-box',
+                      }}
+                      onFocus={e => e.target.style.borderColor = T}
+                      onBlur={e => e.target.style.borderColor = '#e5e7eb'}
+                    />
+                  </div>
+
+                  {/* Date */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '5px' }}>Date of record</label>
+                    <input
+                      type="date"
+                      value={ef.recordDate || ''}
+                      onChange={e => setEditFields(prev => ({ ...prev, [record.id]: { ...prev[record.id], recordDate: e.target.value } }))}
+                      disabled={isSaving}
+                      style={{
+                        width: '100%', padding: '9px 13px', border: '1px solid #e5e7eb', borderRadius: '8px',
+                        fontSize: '14px', color: '#111827', background: 'white', fontFamily: FONT,
+                        outline: 'none', boxSizing: 'border-box',
+                      }}
+                      onFocus={e => e.target.style.borderColor = T}
+                      onBlur={e => e.target.style.borderColor = '#e5e7eb'}
+                    />
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '5px' }}>Notes</label>
+                    <textarea
+                      placeholder="e.g. Follow-up required, fasting required…"
+                      value={ef.recordNotes || ''}
+                      onChange={e => setEditFields(prev => ({ ...prev, [record.id]: { ...prev[record.id], recordNotes: e.target.value } }))}
+                      disabled={isSaving}
+                      rows={3}
+                      style={{
+                        width: '100%', padding: '9px 13px', border: '1px solid #e5e7eb', borderRadius: '8px',
+                        fontSize: '14px', color: '#111827', background: 'white', fontFamily: FONT,
+                        outline: 'none', boxSizing: 'border-box', resize: 'vertical', minHeight: '70px', lineHeight: '1.5',
+                      }}
+                      onFocus={e => e.target.style.borderColor = T}
+                      onBlur={e => e.target.style.borderColor = '#e5e7eb'}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
+                  <button
+                    onClick={() => handleSaveEdit(record)}
+                    disabled={isSaving}
+                    style={{
+                      flex: 1, padding: '10px 18px', background: isSaving ? '#e5e7eb' : T,
+                      color: isSaving ? '#9ca3af' : 'white', border: 'none', borderRadius: '8px',
+                      fontSize: '14px', fontWeight: '600', cursor: isSaving ? 'not-allowed' : 'pointer',
+                      fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    {isSaving ? (
+                      <><div style={{ width: '12px', height: '12px', borderRadius: '50%', border: '2px solid #9ca3af', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />Saving…</>
+                    ) : 'Save changes'}
+                  </button>
+                  <button
+                    onClick={() => setEditOpen(null)}
+                    disabled={isSaving}
+                    style={{
+                      padding: '10px 16px', background: 'white', color: '#6b7280',
+                      border: '1px solid #e5e7eb', borderRadius: '8px',
+                      fontSize: '14px', fontWeight: '500', cursor: 'pointer', fontFamily: FONT,
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
             )}
 
             {err && (
@@ -1109,7 +1276,14 @@ function Dashboard({ userEmail, userId, onLogout }) {
         </div>
 
         {activeTab === 'upload' && <UploadRecord onUploadSuccess={handleUploadSuccess} />}
-        {activeTab === 'records' && <RecordsList records={records} onDelete={handleDelete} userId={userId} />}
+        {activeTab === 'records' && (
+          <RecordsList
+            records={records}
+            onDelete={handleDelete}
+            onUpdate={(id, updatedMetadata) => setRecords(prev => prev.map(r => r.id === id ? { ...r, metadata: updatedMetadata } : r))}
+            userId={userId}
+          />
+        )}
       </div>
     </div>
   );
