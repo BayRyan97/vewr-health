@@ -9,6 +9,13 @@ const T_DARK = '#007F7B';
 const FONT = '"Gotham SSm A", "Gotham SSm B", system-ui, -apple-system, sans-serif';
 const PRIVY_CONFIGURED = !!process.env.REACT_APP_PRIVY_APP_ID;
 
+// ─── Analytics helper ─────────────────────────────────────────────────────────
+function track(eventName, params = {}) {
+  if (typeof window.gtag === 'function') {
+    window.gtag('event', eventName, params);
+  }
+}
+
 // ─── Shield icon ─────────────────────────────────────────────────────────────
 function ShieldIcon({ size = 20, color = 'white' }) {
   return (
@@ -215,6 +222,7 @@ function RecordsList({ records, onDelete }) {
       const decryptedData = await decryptFile(encryptedData, encryptedKey, iv);
 
       // Trigger browser download
+      track('record_downloaded', { file_type: originalFileType });
       const blob = new Blob([decryptedData], { type: originalFileType || 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -446,6 +454,10 @@ function Dashboard({ userEmail, userId, onLogout }) {
   const storageKey = `vewr_records_${userId}`;
 
   useEffect(() => {
+    track('portal_viewed', { user_id: userId });
+  }, [userId]);
+
+  useEffect(() => {
     const loadRecords = async () => {
       if (isSupabaseConfigured) {
         // Fetch from Supabase — works across all devices
@@ -498,6 +510,7 @@ function Dashboard({ userEmail, userId, onLogout }) {
     }
 
     // 3. Remove from UI
+    track('record_deleted');
     setRecords(prev => prev.filter(r => r.id !== id));
   };
 
@@ -529,6 +542,7 @@ function Dashboard({ userEmail, userId, onLogout }) {
         localStorage.setItem(storageKey, JSON.stringify(updated));
       } catch (e) {}
     }
+    track('record_uploaded', { file_type: record.metadata?.originalFileType });
     setActiveTab('records');
   };
 
@@ -725,7 +739,7 @@ function PrivyGatedPortal() {
   }
 
   if (!authenticated) {
-    return <LoginScreen onLogin={login} />;
+    return <LoginScreen onLogin={() => { track('login_started'); login(); }} />;
   }
 
   const userEmail =
@@ -733,7 +747,7 @@ function PrivyGatedPortal() {
     user?.linkedAccounts?.find(a => a.type === 'email')?.address ||
     '';
 
-  return <Dashboard userEmail={userEmail} userId={user?.id || 'anonymous'} onLogout={logout} />;
+  return <Dashboard userEmail={userEmail} userId={user?.id || 'anonymous'} onLogout={() => { track('logout'); logout(); }} />;
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
