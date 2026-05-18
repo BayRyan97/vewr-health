@@ -1573,13 +1573,11 @@ function Dashboard({ userEmail, userId, onLogout }) {
 
   // ── Background migration: upgrade v1 records to KEK-wrapped keys ──────────
   useEffect(() => {
-    console.log('[Vewr] Migration check — records:', records.length, 'wallets:', wallets.length, 'ran:', migrationRan.current);
     if (migrationRan.current || records.length === 0 || wallets.length === 0) return;
 
     const v1Records = records.filter(r =>
       (!r.metadata?.keyVersion || r.metadata.keyVersion < 2) && r.metadata?.encryptedKey
     );
-    console.log('[Vewr] v1 records found:', v1Records.length);
     if (v1Records.length === 0) return;
 
     migrationRan.current = true;
@@ -1587,12 +1585,9 @@ function Dashboard({ userEmail, userId, onLogout }) {
     (async () => {
       try {
         const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
-        console.log('[Vewr] Embedded wallet:', embeddedWallet ? embeddedWallet.address : 'NOT FOUND');
-        console.log('[Vewr] All wallet types:', wallets.map(w => w.walletClientType));
         if (!embeddedWallet) return;
 
         const kek = await getOrDeriveKEK(embeddedWallet, userId);
-        console.log('[Vewr] KEK derived successfully');
 
         for (const record of v1Records) {
           try {
@@ -1600,20 +1595,16 @@ function Dashboard({ userEmail, userId, onLogout }) {
             const wrappedKey = await wrapFileKey(fileKey, kek);
             const updatedMeta = { ...record.metadata, encryptedKey: wrappedKey, keyVersion: 2 };
             if (isSupabaseConfigured) {
-              const { error } = await supabase.from('records').update({ metadata: updatedMeta }).eq('id', record.id);
-              if (error) console.warn('[Vewr] Supabase update error for', record.id, error);
+              await supabase.from('records').update({ metadata: updatedMeta }).eq('id', record.id);
             }
             setRecords(prev => prev.map(r =>
               r.id === record.id ? { ...r, metadata: updatedMeta } : r
             ));
-            console.log('[Vewr] Migrated record', record.id);
           } catch (e) {
-            console.warn('[Vewr] Could not migrate record', record.id, e);
+            // Individual record migration failure — skip and continue
           }
         }
-        console.log(`[Vewr] Migration complete — ${v1Records.length} record(s) upgraded to key version 2`);
       } catch (e) {
-        console.warn('[Vewr] Key migration failed:', e);
         migrationRan.current = false;
       }
     })();
