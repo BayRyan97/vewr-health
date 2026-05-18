@@ -316,8 +316,8 @@ function SharePanel({ record, userId, onClose }) {
       const { data, error } = await createShareLink(record, userId, hours, wrappedKeyForShare);
       if (error || !data) throw new Error('Failed to create share link. Please try again.');
 
-      // 5. The share key goes in the URL fragment — never sent to any server
-      const url = `${window.location.origin}/share/${data.token}#${shareKeyB64}`;
+      // 5. The share key goes in the URL as a query param — GTM mangles fragments
+      const url = `${window.location.origin}/share/${data.token}?k=${encodeURIComponent(shareKeyB64)}`;
       setGeneratedUrl(url);
       track('record_shared', { file_type: record.metadata?.originalFileType, expiry_hours: Math.round(hours) });
       await loadLinks();
