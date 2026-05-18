@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy, useWallets, useCreateWallet } from '@privy-io/react-auth';
 import UploadRecord from '../components/UploadRecord';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import {
@@ -1500,7 +1500,27 @@ function LinksTab({ userId }) {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 function Dashboard({ userEmail, userId, onLogout }) {
   const { wallets } = useWallets();
+  const { createWallet } = useCreateWallet();
   const migrationRan = useRef(false);
+  const walletCreationAttempted = useRef(false);
+
+  // If the user has no embedded wallet yet (e.g. it failed to create at login
+  // because the domain wasn't authorized), trigger creation now.
+  useEffect(() => {
+    if (walletCreationAttempted.current) return;
+    const hasEmbedded = wallets.some(w => w.walletClientType === 'privy');
+    if (hasEmbedded) return;
+    // Small delay to let Privy finish initializing before we try
+    const t = setTimeout(async () => {
+      walletCreationAttempted.current = true;
+      try {
+        await createWallet();
+      } catch (e) {
+        // Wallet may already exist — safe to ignore
+      }
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [wallets, createWallet]);
   const [activeTab, setActiveTab] = useState('upload');
   const [records, setRecords] = useState([]);
 
