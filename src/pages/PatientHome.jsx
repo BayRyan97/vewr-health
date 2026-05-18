@@ -1589,7 +1589,7 @@ function Dashboard({ userEmail, userId, onLogout }) {
         migrationRan.current = false; // allow retry on next render
       }
     })();
-  }, [records.length, wallets, userId]);
+  }, [records, wallets, userId]);
 
   const handleDelete = async (record) => {
     const { id, cid } = record;
