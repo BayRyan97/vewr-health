@@ -96,6 +96,9 @@ export default function ShareView() {
       // v2 share link: share key in URL fragment, file key wrapped server-side
       // v1 share link: plain file key stored in DB (legacy, backward compat)
       const shareKeyB64 = window.location.hash.slice(1);
+      console.log('[ShareView] hash:', window.location.hash);
+      console.log('[ShareView] shareKeyB64 length:', shareKeyB64.length);
+      console.log('[ShareView] encrypted_key length:', link.encrypted_key?.length);
       const decryptedData = shareKeyB64
         ? await decryptFileWithShareKey(encryptedData, link.encrypted_key, link.iv, shareKeyB64)
         : await decryptFile(encryptedData, link.encrypted_key, link.iv);
