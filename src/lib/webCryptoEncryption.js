@@ -169,6 +169,53 @@ export async function importPlainKey(base64Key) {
 // ─── Encrypt ──────────────────────────────────────────────────────────────────
 
 /**
+ * v1 legacy — Encrypt a file and store the raw file key as plain base64 in metadata.
+ * Used as a fallback when the embedded wallet is unavailable (e.g. GitHub Pages
+ * without COOP headers). Records created this way carry keyVersion: 1 and will be
+ * migrated to v2 automatically once the host supports COOP/COEP.
+ *
+ * @param {File} file
+ * @returns {Promise<{ encryptedFile: File, metadata: object }>}
+ */
+export async function encryptFileLegacy(file) {
+  const fileKey = await crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt']
+  );
+
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  const encryptedData = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    fileKey,
+    await file.arrayBuffer()
+  );
+
+  // Export the raw key as base64 — stored unprotected (v1 scheme)
+  const rawKey = await crypto.subtle.exportKey('raw', fileKey);
+
+  return {
+    encryptedFile: new File(
+      [encryptedData],
+      `encrypted_${file.name}`,
+      { type: 'application/octet-stream' }
+    ),
+    metadata: {
+      originalFileName: file.name,
+      originalFileType: file.type,
+      originalFileSize: file.size,
+      encryptedKey: _bufToB64(rawKey),   // plain base64 — v1
+      iv: _bufToB64(iv),
+      encryptedAt: new Date().toISOString(),
+      algorithm: 'AES-256-GCM',
+      keyVersion: 1,                     // v1 = plain key stored in Supabase
+      encrypted: true,
+    },
+  };
+}
+
+/**
  * Encrypt a file and wrap its key with the user's KEK.
  *
  * @param {File}      file - The file to encrypt

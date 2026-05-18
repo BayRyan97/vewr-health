@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useWallets, usePrivy } from '@privy-io/react-auth';
-import { encryptFile, getOrDeriveKEK } from '../lib/webCryptoEncryption';
+import { encryptFile, encryptFileLegacy, getOrDeriveKEK } from '../lib/webCryptoEncryption';
 import { RECORD_TYPES } from '../pages/PatientHome';
 
 const T = '#00A19C';
@@ -75,13 +75,21 @@ function UploadRecord({ onUploadSuccess }) {
     try {
       setStage('encrypting');
 
-      // Derive the session KEK from the user's Privy embedded wallet
+      // Attempt to derive KEK from Privy embedded wallet.
+      // Falls back to v1 (plain key storage) if wallet is unavailable —
+      // this happens on hosts that don't support COOP headers (e.g. GitHub Pages).
       const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
-      if (!embeddedWallet) {
-        throw new Error('Your secure vault is still loading. Please wait a moment and try again.');
+      let encryptedFile, metadata;
+      if (embeddedWallet) {
+        // v2 — KEK-wrapped key, never stored in plain text
+        const kek = await getOrDeriveKEK(embeddedWallet, user?.id || 'unknown');
+        ({ encryptedFile, metadata } = await encryptFile(file, kek));
+      } else {
+        // v1 fallback — plain key stored in Supabase.
+        // Used when the embedded wallet is unavailable (e.g. GitHub Pages without COOP headers).
+        // These records will be migrated to v2 automatically once the host supports COOP/COEP.
+        ({ encryptedFile, metadata } = await encryptFileLegacy(file));
       }
-      const kek = await getOrDeriveKEK(embeddedWallet, user?.id || 'unknown');
-      const { encryptedFile, metadata } = await encryptFile(file, kek);
 
       setStage('uploading');
       const formData = new FormData();
