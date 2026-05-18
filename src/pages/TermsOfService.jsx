@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 const T = '#00A19C';
 const FONT = '"Gotham SSm A", "Gotham SSm B", system-ui, -apple-system, sans-serif';
-const EFFECTIVE_DATE = 'May 15, 2026';
+const EFFECTIVE_DATE = 'May 17, 2026';
 
 const sections = [
   {
@@ -44,7 +44,7 @@ const sections = [
   },
   {
     title: '10. Governing Law',
-    body: `These Terms are governed by the laws of the State of Delaware, without regard to conflict of law principles. Any disputes will be resolved in the state or federal courts located in Delaware.`,
+    body: `These Terms are governed by the laws of the State of New York, without regard to conflict of law principles. Any disputes will be resolved in the state or federal courts located in New York County, New York.`,
   },
   {
     title: '11. Contact',
