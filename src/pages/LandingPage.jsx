@@ -363,7 +363,7 @@ function LandingPage() {
               {[
                 { label: 'Sign in with email', icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> },
                 { label: 'Browser-encrypted', icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> },
-                { label: 'No crypto wallet needed', icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg> },
+                { label: 'Works in any browser', icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg> },
               ].map(({ label, icon }) => (
                 <div key={label} style={{
                   display: 'flex', alignItems: 'center', gap: '6px',
@@ -528,7 +528,7 @@ function LandingPage() {
 
             {[
               {
-                n: '01', title: 'Upload', desc: 'Sign in with your email — no crypto wallet or seed phrase needed. Then select any medical file from your device.',
+                n: '01', title: 'Upload', desc: 'Sign in with your email and select any medical file from your device. No special software or accounts required.',
                 icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               },
               {
@@ -540,7 +540,7 @@ function LandingPage() {
                 icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
               },
               {
-                n: '04', title: 'Share', desc: 'Grant a provider cryptographic access to specific records. Revoke it any time.',
+                n: '04', title: 'Share', desc: 'Send a secure link to any provider for exactly the records you choose. Revoke access any time.',
                 icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               },
             ].map(({ n, title, desc, icon }) => (
@@ -656,13 +656,13 @@ function LandingPage() {
               Records patients<br />actually trust you with.
             </h2>
             <p style={{ fontSize: '16px', color: '#64748b', lineHeight: '1.75', margin: '0 0 36px 0' }}>
-              Patients share access through Vewr — cryptographically verified, not through a fax or a broken portal.
+              Patients share access through Vewr — securely, on their terms, not through a fax or a broken portal.
               You get exactly what they choose to share, and they can take it back at any time.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {[
                 'No logins or portals to manage',
-                'Access is cryptographically granted, not just permission-checked',
+                'Access is verified and controlled by the patient, not the provider',
                 'Patients can revoke access at any time',
                 'Full audit trail patients control',
               ].map((item) => (

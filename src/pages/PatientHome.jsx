@@ -118,7 +118,7 @@ function LoginScreen({ onLogin }) {
           color: 'rgba(255,255,255,0.45)', fontSize: '15px',
           margin: '0 0 36px 0', lineHeight: '1.65',
         }}>
-          We'll send a one-time code to your email.<br />No password, no crypto wallet needed.
+          We'll send a one-time code to your email.<br />No password, no app to download.
         </p>
 
         <button
@@ -142,7 +142,7 @@ function LoginScreen({ onLogin }) {
 
         {/* Trust pills */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '28px', flexWrap: 'wrap' }}>
-          {['Browser-encrypted', 'No password', 'No crypto wallet'].map(pill => (
+          {['Browser-encrypted', 'No password', 'Works on any device'].map(pill => (
             <span key={pill} style={{
               fontSize: '12px', color: 'rgba(255,255,255,0.35)',
               background: 'rgba(255,255,255,0.04)',
