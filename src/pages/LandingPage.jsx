@@ -204,6 +204,7 @@ function LandingPage() {
           .vw-faq-grid { grid-template-columns: 1fr !important; gap: 32px !important; }
           .vw-faq-sticky { position: static !important; }
           .vw-footer-cta { padding: 72px 20px !important; }
+          .vw-timeline-grid { grid-template-columns: 1fr !important; gap: 32px !important; }
         }
       `}</style>
 
@@ -773,140 +774,141 @@ function LandingPage() {
       {/* ── FAQ ── */}
       <FaqSection T={T} AMBER={AMBER} ROSE={ROSE} />
 
-      {/* ── HIPAA ROADMAP ── */}
-      <section style={{ padding: '100px 40px', background: '#0d1117' }}>
+      {/* ── COMPANY ROADMAP ── */}
+      <section className="vw-section" style={{ padding: '100px 40px', background: '#0d1117' }}>
         <div style={{ maxWidth: '1080px', margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: '64px' }}>
             <p style={{ color: T, fontSize: '12px', fontWeight: '700', letterSpacing: '2px', margin: '0 0 12px 0' }}>
-              COMPLIANCE ROADMAP
+              WHERE WE'RE HEADED
             </p>
             <h2 style={{
               fontSize: 'clamp(26px, 3vw, 38px)', fontWeight: '800',
               letterSpacing: '-1px', color: 'white', margin: '0 0 16px 0', lineHeight: 1.15,
             }}>
-              Where we stand and where we're going.
+              Built in the open. Growing with you.
             </h2>
-            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '16px', margin: 0, maxWidth: '520px', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.7 }}>
-              We believe in being upfront about what Vewr is today and what it's building toward.
+            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '16px', margin: '0 auto', maxWidth: '520px', lineHeight: 1.7 }}>
+              Here's exactly what's live, what we're building next, and where Vewr is headed.
             </p>
           </div>
 
-          {/* Timeline */}
-          <div style={{ position: 'relative' }}>
-            {/* Connecting line */}
-            <div style={{
-              position: 'absolute', top: '36px', left: '0', right: '0',
-              height: '2px', background: 'rgba(255,255,255,0.06)',
-              zIndex: 0,
-            }} />
-
-            <div style={{
-              display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '24px', position: 'relative', zIndex: 1,
-            }}>
-              {[
-                {
-                  phase: 'Phase 1',
-                  status: 'Now',
-                  color: T,
-                  title: 'Consumer Privacy',
-                  points: [
-                    'Client-side encryption before upload',
-                    'Files are unreadable without your key',
-                    'No PHI stored on our servers',
-                    'Built for individuals, not institutions',
-                  ],
-                },
-                {
-                  phase: 'Phase 2',
-                  status: 'Next',
-                  color: AMBER,
-                  title: 'Legal Framework',
-                  points: [
-                    'Business Associate Agreements with all vendors',
-                    'Formal audit logs and access controls',
-                    'Breach notification procedures',
-                    'Annual risk assessments',
-                  ],
-                },
-                {
-                  phase: 'Phase 3',
-                  status: 'Goal',
-                  color: ROSE,
-                  title: 'Full HIPAA Compliance',
-                  points: [
-                    'Certified for use by clinics and hospitals',
-                    'Provider portal with verified HCP accounts',
-                    'Compliant data sharing between patients and providers',
-                    'Enterprise-grade audit trail',
-                  ],
-                },
-              ].map((phase, i) => (
-                <div key={i} style={{ display: 'flex', flexDirection: 'column' }}>
-                  {/* Phase dot + status */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-                    <div style={{
-                      width: '36px', height: '36px', borderRadius: '50%',
-                      background: `${phase.color}20`, border: `2px solid ${phase.color}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      flexShrink: 0,
-                    }}>
-                      {i === 0 ? (
-                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: phase.color }} />
-                      ) : (
-                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: `${phase.color}40` }} />
-                      )}
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '11px', fontWeight: '700', color: phase.color, letterSpacing: '1px' }}>
-                        {phase.phase} · {phase.status}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card */}
+          {/* Timeline — 3 columns on desktop, stacked on mobile */}
+          <div className="vw-timeline-grid" style={{
+            display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '24px', position: 'relative',
+          }}>
+            {[
+              {
+                phase: 'Phase 1',
+                status: 'Live Now',
+                color: T,
+                title: 'Your Private Vault',
+                done: true,
+                points: [
+                  'Upload any medical file — PDF, JPG, PNG',
+                  'AES-256-GCM encryption runs in your browser',
+                  'Stored on decentralized IPFS — no single point of failure',
+                  'Share links with custom expiry and instant revoke',
+                  'Tag records by type, add names, dates, and notes',
+                  'View who opened your shared links and when',
+                ],
+              },
+              {
+                phase: 'Phase 2',
+                status: 'Up Next',
+                color: AMBER,
+                title: 'Smarter Sharing',
+                done: false,
+                points: [
+                  'Provider portal with verified healthcare accounts',
+                  'Request access to specific records from a provider',
+                  'Full audit log — who accessed what, and when',
+                  'Mobile app for iOS and Android',
+                ],
+              },
+              {
+                phase: 'Phase 3',
+                status: 'On the Horizon',
+                color: ROSE,
+                title: 'Healthcare Infrastructure',
+                done: false,
+                points: [
+                  'HIPAA-certified for clinics and hospital systems',
+                  'Integration with major EHR platforms',
+                  'Provider-initiated record requests with patient approval',
+                  'Enterprise audit trail and access management',
+                ],
+              },
+            ].map((phase, i) => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column' }}>
+                {/* Phase dot + label */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
                   <div style={{
-                    background: i === 0 ? `${phase.color}08` : 'rgba(255,255,255,0.02)',
-                    border: `1px solid ${i === 0 ? phase.color + '30' : 'rgba(255,255,255,0.06)'}`,
-                    borderRadius: '16px', padding: '28px',
-                    flex: 1,
+                    width: '36px', height: '36px', borderRadius: '50%',
+                    background: `${phase.color}20`, border: `2px solid ${phase.color}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
                   }}>
-                    <h3 style={{
-                      color: 'white', fontSize: '18px', fontWeight: '700',
-                      margin: '0 0 20px 0', letterSpacing: '-0.3px',
-                    }}>
-                      {phase.title}
-                    </h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {phase.points.map((point, j) => (
-                        <div key={j} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                          <div style={{
-                            width: '18px', height: '18px', borderRadius: '50%',
-                            background: `${phase.color}15`, border: `1px solid ${phase.color}30`,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            flexShrink: 0, marginTop: '1px',
-                          }}>
-                            {i === 0 ? (
-                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={phase.color} strokeWidth="3">
-                                <polyline points="20 6 9 17 4 12"/>
-                              </svg>
-                            ) : (
-                              <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: `${phase.color}50` }} />
-                            )}
-                          </div>
-                          <p style={{
-                            color: i === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.35)',
-                            fontSize: '14px', margin: 0, lineHeight: '1.6',
-                          }}>
-                            {point}
-                          </p>
-                        </div>
-                      ))}
+                    {phase.done ? (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={phase.color} strokeWidth="3">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    ) : (
+                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: `${phase.color}50` }} />
+                    )}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '10px', fontWeight: '700', color: 'rgba(255,255,255,0.3)', letterSpacing: '1px', marginBottom: '2px' }}>
+                      {phase.phase}
+                    </div>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: phase.color, letterSpacing: '0.5px' }}>
+                      {phase.status}
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
+
+                {/* Card */}
+                <div style={{
+                  background: phase.done ? `${phase.color}08` : 'rgba(255,255,255,0.02)',
+                  border: `1px solid ${phase.done ? phase.color + '30' : 'rgba(255,255,255,0.06)'}`,
+                  borderRadius: '16px', padding: '24px',
+                  flex: 1,
+                }}>
+                  <h3 style={{
+                    color: 'white', fontSize: '17px', fontWeight: '700',
+                    margin: '0 0 18px 0', letterSpacing: '-0.3px',
+                  }}>
+                    {phase.title}
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {phase.points.map((point, j) => (
+                      <div key={j} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                        <div style={{
+                          width: '16px', height: '16px', borderRadius: '50%',
+                          background: `${phase.color}15`, border: `1px solid ${phase.color}30`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          flexShrink: 0, marginTop: '2px',
+                        }}>
+                          {phase.done ? (
+                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={phase.color} strokeWidth="3.5">
+                              <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                          ) : (
+                            <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: `${phase.color}60` }} />
+                          )}
+                        </div>
+                        <p style={{
+                          color: phase.done ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.3)',
+                          fontSize: '13px', margin: 0, lineHeight: '1.6',
+                        }}>
+                          {point}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
