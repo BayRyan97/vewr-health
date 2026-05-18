@@ -13,16 +13,26 @@ function generateToken() {
 /**
  * Create a share link for a record.
  *
- * @param {object} record   - Full record object from Supabase ({id, cid, metadata, uploadedAt})
- * @param {string} userId   - Privy user ID (owner)
- * @param {number} expiryHours - How long the link stays valid (e.g. 24, 168, 720)
+ * The caller is responsible for:
+ *   1. Deriving the KEK and unwrapping the file key from record.metadata
+ *   2. Generating a random share key
+ *   3. Re-wrapping the file key with the share key → wrappedKeyForShare
+ *   4. Placing the share key in the URL fragment (#shareKeyB64)
+ *
+ * This function stores only the share-key-wrapped file key.
+ * The share key itself never reaches this function or any server.
+ *
+ * @param {object} record           - Full record object from Supabase
+ * @param {string} userId           - Privy user ID (owner)
+ * @param {number} expiryHours      - How long the link stays valid
+ * @param {string} wrappedKeyForShare - Base64 file key wrapped with the share key
  * @returns {Promise<{ data: object|null, error: object|null }>}
  */
-export async function createShareLink(record, userId, expiryHours = 24) {
+export async function createShareLink(record, userId, expiryHours = 24, wrappedKeyForShare) {
   const token = generateToken();
   const expiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000).toISOString();
 
-  const { encryptedKey, iv, originalFileName, originalFileType, recordName, recordType } = record.metadata || {};
+  const { iv, originalFileName, originalFileType, recordName, recordType } = record.metadata || {};
 
   const { data, error } = await supabase
     .from('share_links')
@@ -33,9 +43,8 @@ export async function createShareLink(record, userId, expiryHours = 24) {
       expires_at: expiresAt,
       revoked: false,
       cid: record.cid,
-      encrypted_key: encryptedKey,
+      encrypted_key: wrappedKeyForShare,   // share-key-wrapped — not the plain file key
       iv,
-      // Use user's custom name if set, fall back to original filename
       file_name: recordName || originalFileName || 'Medical Record',
       file_type: originalFileType || 'application/octet-stream',
       record_type: recordType || null,

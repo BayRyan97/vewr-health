@@ -20,7 +20,7 @@ const sections = [
   },
   {
     title: '4. Your Account',
-    body: `You sign in using your email address via a one-time code (provided by Privy). You are responsible for maintaining access to your email account. We are not responsible for loss of access resulting from loss of email account access.\n\nYour encryption key is managed by Privy's MPC (Multi-Party Computation) infrastructure. If you choose to export and self-custody your key, you accept full responsibility for its security.`,
+    body: `You sign in using your email address via a one-time code (provided by Privy). You are responsible for maintaining access to your email account. We are not responsible for loss of access resulting from loss of email account access.\n\nEach file you upload is encrypted with a unique AES-256-GCM key. That file key is itself protected by a Key Encryption Key (KEK) derived from your Privy embedded wallet — a cryptographic identity managed via Privy's MPC (Multi-Party Computation) infrastructure, meaning no single server holds it. The KEK is re-derived fresh each session directly in your browser and is never stored anywhere. Vewr cannot access your files.\n\nWhen you share a record, a one-time share key is generated and placed in the URL you send — it never reaches our servers. The share link stored on our side is useless without it. Revoking a share link removes our copy, making the URL permanently inaccessible even if the recipient kept it.`,
   },
   {
     title: '5. Your Data',

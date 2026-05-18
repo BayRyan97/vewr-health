@@ -1,8 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { usePrivy } from '@privy-io/react-auth';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import UploadRecord from '../components/UploadRecord';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { decryptFile } from '../lib/webCryptoEncryption';
+import {
+  decryptFile,
+  decryptFileV2,
+  getOrDeriveKEK,
+  unwrapFileKey,
+  importPlainKey,
+  wrapFileKey,
+  generateShareKey,
+  wrapFileKeyWithShareKey,
+} from '../lib/webCryptoEncryption';
 import { createShareLink, getShareLinksForRecord, revokeShareLink, getAllShareLinksForUser } from '../lib/shareLinks';
 
 const T = '#00A19C';
@@ -239,6 +248,7 @@ function minCustomDatetime() {
 }
 
 function SharePanel({ record, userId, onClose }) {
+  const { wallets } = useWallets();
   const [expiryMode, setExpiryMode] = useState('preset'); // 'preset' | 'custom'
   const [selectedPreset, setSelectedPreset] = useState(EXPIRY_PRESETS[0]);
   const [customDatetime, setCustomDatetime] = useState(''); // datetime-local value
@@ -283,14 +293,36 @@ function SharePanel({ record, userId, onClose }) {
     }
 
     setCreating(true);
-    const { data, error } = await createShareLink(record, userId, hours);
-    if (error || !data) {
-      setShareError('Failed to create share link. Please try again.');
-    } else {
-      const url = `${window.location.origin}/share/${data.token}`;
+    try {
+      // 1. Get the embedded wallet
+      const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
+      if (!embeddedWallet) throw new Error('Wallet not ready — please try again.');
+
+      // 2. Resolve the file key (v2: unwrap with KEK; v1: import plain key)
+      const keyVersion = record.metadata?.keyVersion || 1;
+      let fileKey;
+      if (keyVersion >= 2) {
+        const kek = await getOrDeriveKEK(embeddedWallet, userId);
+        fileKey = await unwrapFileKey(record.metadata.encryptedKey, kek);
+      } else {
+        fileKey = await importPlainKey(record.metadata.encryptedKey);
+      }
+
+      // 3. Generate a one-time share key and re-wrap the file key with it
+      const { shareKey, shareKeyB64 } = await generateShareKey();
+      const wrappedKeyForShare = await wrapFileKeyWithShareKey(fileKey, shareKey);
+
+      // 4. Store the share-key-wrapped file key in Supabase
+      const { data, error } = await createShareLink(record, userId, hours, wrappedKeyForShare);
+      if (error || !data) throw new Error('Failed to create share link. Please try again.');
+
+      // 5. The share key goes in the URL fragment — never sent to any server
+      const url = `${window.location.origin}/share/${data.token}#${shareKeyB64}`;
       setGeneratedUrl(url);
       track('record_shared', { file_type: record.metadata?.originalFileType, expiry_hours: Math.round(hours) });
       await loadLinks();
+    } catch (err) {
+      setShareError(err.message || 'Failed to create share link. Please try again.');
     }
     setCreating(false);
   };
@@ -597,6 +629,7 @@ function SharePanel({ record, userId, onClose }) {
 }
 
 function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
+  const { wallets } = useWallets();
   const [downloading, setDownloading] = useState({});
   const [dlError, setDlError] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -625,7 +658,18 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
       const encryptedData = await fetchFromIPFS(cid);
 
       setDownloading(prev => ({ ...prev, [id]: 'decrypting' }));
-      const decryptedData = await decryptFile(encryptedData, encryptedKey, iv);
+
+      // v2: unwrap file key with KEK; v1: use plain base64 key directly
+      const keyVersion = metadata?.keyVersion || 1;
+      let decryptedData;
+      if (keyVersion >= 2) {
+        const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
+        if (!embeddedWallet) throw new Error('Your vault is still loading. Please try again.');
+        const kek = await getOrDeriveKEK(embeddedWallet, userId);
+        decryptedData = await decryptFileV2(encryptedData, encryptedKey, iv, kek);
+      } else {
+        decryptedData = await decryptFile(encryptedData, encryptedKey, iv);
+      }
 
       // Trigger browser download
       track('record_downloaded', { file_type: originalFileType });
@@ -1455,6 +1499,8 @@ function LinksTab({ userId }) {
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 function Dashboard({ userEmail, userId, onLogout }) {
+  const { wallets } = useWallets();
+  const migrationRan = useRef(false);
   const [activeTab, setActiveTab] = useState('upload');
   const [records, setRecords] = useState([]);
 
@@ -1504,6 +1550,46 @@ function Dashboard({ userEmail, userId, onLogout }) {
     };
     loadRecords();
   }, [userId, storageKey]);
+
+  // ── Background migration: upgrade v1 records to KEK-wrapped keys ──────────
+  useEffect(() => {
+    if (migrationRan.current || records.length === 0 || wallets.length === 0) return;
+
+    const v1Records = records.filter(r =>
+      (!r.metadata?.keyVersion || r.metadata.keyVersion < 2) && r.metadata?.encryptedKey
+    );
+    if (v1Records.length === 0) return;
+
+    migrationRan.current = true;
+
+    (async () => {
+      try {
+        const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
+        if (!embeddedWallet) return;
+
+        const kek = await getOrDeriveKEK(embeddedWallet, userId);
+        for (const record of v1Records) {
+          try {
+            const fileKey = await importPlainKey(record.metadata.encryptedKey);
+            const wrappedKey = await wrapFileKey(fileKey, kek);
+            const updatedMeta = { ...record.metadata, encryptedKey: wrappedKey, keyVersion: 2 };
+            if (isSupabaseConfigured) {
+              await supabase.from('records').update({ metadata: updatedMeta }).eq('id', record.id);
+            }
+            setRecords(prev => prev.map(r =>
+              r.id === record.id ? { ...r, metadata: updatedMeta } : r
+            ));
+          } catch (e) {
+            console.warn('Could not migrate record', record.id, e);
+          }
+        }
+        console.log(`[Vewr] Migrated ${v1Records.length} record(s) to key version 2`);
+      } catch (e) {
+        console.warn('[Vewr] Key migration failed:', e);
+        migrationRan.current = false; // allow retry on next render
+      }
+    })();
+  }, [records.length, wallets, userId]);
 
   const handleDelete = async (record) => {
     const { id, cid } = record;

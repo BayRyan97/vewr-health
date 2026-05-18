@@ -1,199 +1,265 @@
 /**
  * Web Crypto API Encryption for Vewr Health
- * Uses AES-256-GCM for file encryption
+ *
+ * Key hierarchy:
+ *
+ *   KEK  (Key Encryption Key)
+ *     ↑  derived via PBKDF2 from the user's Privy embedded-wallet signature
+ *     ↑  never stored anywhere — re-derived fresh each session, lives in memory only
+ *
+ *   File Key  (AES-256-GCM, unique per file)
+ *     ↑  wrapped (encrypted) with the KEK before being stored
+ *     ↑  stored as an opaque blob in records.metadata.encryptedKey  (keyVersion: 2)
+ *
+ *   Share Key  (AES-256-KW, unique per share link)
+ *     ↑  random, placed in the URL fragment (#...) — never reaches any server
+ *     ↑  the file key is wrapped with this share key and stored in share_links.encrypted_key
+ *     ↑  revoking a share link deletes the server's copy of the wrapped file key,
+ *        making the URL useless even if the recipient kept it
+ *
+ *  Legacy (keyVersion: 1 / no keyVersion):
+ *     Plain base64 file key stored in Supabase — these records are migrated to v2
+ *     automatically on next login. Backward-compat decrypt functions are kept below.
  */
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const KEK_SIGN_MESSAGE = 'Vewr Key Derivation v1';
+
+// ─── Session KEK cache ────────────────────────────────────────────────────────
+// The KEK lives in memory only. It is cleared whenever the page is reloaded.
+// The embedded-wallet signature is requested at most once per session.
+let _kekCache = null; // { userId: string, kek: CryptoKey }
+
+// ─── KEK derivation ───────────────────────────────────────────────────────────
+
 /**
- * Generate a random encryption key
- * TODO: Replace with key derived from wallet signature
- * @returns {Promise<CryptoKey>} AES-256-GCM key
+ * Return the session KEK, deriving it if not yet cached.
+ * Signs a fixed message with the user's Privy embedded wallet and runs
+ * PBKDF2 over the signature to produce a 256-bit AES-KW key.
+ *
+ * @param {object} wallet  - Privy embedded wallet object (from useWallets())
+ * @param {string} userId  - Privy user ID (used as PBKDF2 salt input)
+ * @returns {Promise<CryptoKey>}
  */
-async function generateKey() {
-  return await window.crypto.subtle.generateKey(
-    {
-      name: 'AES-GCM',
-      length: 256,
-    },
-    true, // extractable
-    ['encrypt', 'decrypt']
-  );
+export async function getOrDeriveKEK(wallet, userId) {
+  if (_kekCache && _kekCache.userId === userId) {
+    return _kekCache.kek;
+  }
+
+  const provider = await wallet.getEthereumProvider();
+  const signature = await provider.request({
+    method: 'personal_sign',
+    params: [KEK_SIGN_MESSAGE, wallet.address],
+  });
+
+  const kek = await _deriveKEKFromSignature(signature, userId);
+  _kekCache = { userId, kek };
+  return kek;
 }
 
-/**
- * Derive encryption key from wallet signature
- * TODO: Implement with Privy wallet signature
- * @param {string} walletAddress - The wallet address
- * @param {string} signature - Signature from wallet.signMessage()
- * @returns {Promise<CryptoKey>} Derived encryption key
- */
-// eslint-disable-next-line no-unused-vars
-async function deriveKeyFromSignature(walletAddress, signature) {
-  // Convert signature to bytes
-  const signatureBytes = new TextEncoder().encode(signature);
-  
-  // Import as raw key material
-  const keyMaterial = await window.crypto.subtle.importKey(
-    'raw',
-    signatureBytes,
-    { name: 'PBKDF2' },
-    false,
-    ['deriveBits', 'deriveKey']
+async function _deriveKEKFromSignature(signature, userId) {
+  const sigBytes = new TextEncoder().encode(signature);
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', sigBytes, 'PBKDF2', false, ['deriveKey']
   );
-  
-  // Derive AES key using PBKDF2
-  const key = await window.crypto.subtle.deriveKey(
+  return crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt: new TextEncoder().encode(walletAddress),
-      iterations: 100000,
+      salt: new TextEncoder().encode(`vewr-kek-v1-${userId}`),
+      iterations: 200000,
       hash: 'SHA-256',
     },
     keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    true,
-    ['encrypt', 'decrypt']
+    { name: 'AES-KW', length: 256 },
+    false, // KEK is never extractable
+    ['wrapKey', 'unwrapKey']
   );
-  
-  return key;
+}
+
+// ─── File key wrap / unwrap (with KEK) ───────────────────────────────────────
+
+/**
+ * Wrap a file CryptoKey with the user's KEK.
+ * Result is stored in Supabase — opaque without the KEK.
+ */
+export async function wrapFileKey(fileKey, kek) {
+  const wrapped = await crypto.subtle.wrapKey('raw', fileKey, kek, 'AES-KW');
+  return _bufToB64(wrapped);
 }
 
 /**
- * Export key to storable format
- * @param {CryptoKey} key - The crypto key to export
- * @returns {Promise<string>} Base64-encoded key
+ * Unwrap a file key that was wrapped with the KEK.
+ * Returns an extractable CryptoKey so it can be re-wrapped for share links.
  */
-async function exportKey(key) {
-  const exported = await window.crypto.subtle.exportKey('raw', key);
-  const exportedKeyBuffer = new Uint8Array(exported);
-  const base64Key = btoa(String.fromCharCode(...exportedKeyBuffer));
-  return base64Key;
-}
-
-/**
- * Import key from storable format
- * @param {string} base64Key - Base64-encoded key
- * @returns {Promise<CryptoKey>} Imported crypto key
- */
-async function importKey(base64Key) {
-  const keyBuffer = Uint8Array.from(atob(base64Key), c => c.charCodeAt(0));
-  return await window.crypto.subtle.importKey(
+export async function unwrapFileKey(wrappedKeyB64, kek) {
+  return crypto.subtle.unwrapKey(
     'raw',
-    keyBuffer,
+    _b64ToBuf(wrappedKeyB64),
+    kek,
+    'AES-KW',
     { name: 'AES-GCM', length: 256 },
-    true,
+    true,                    // extractable — needed for re-wrapping into share links
     ['encrypt', 'decrypt']
   );
 }
 
+// ─── Share key (in URL fragment) ──────────────────────────────────────────────
+
 /**
- * Encrypt a file using AES-256-GCM
- * @param {File} file - The file to encrypt
- * @param {string} walletAddress - The wallet address (for now, placeholder)
- * @returns {Promise<Object>} Encrypted file and metadata
+ * Generate a random one-time share key.
+ * shareKeyB64 goes in the URL fragment; shareKey is used to wrap the file key.
  */
-export async function encryptFile(file, walletAddress) {
-  try {
-    console.log('🔐 Starting Web Crypto encryption...');
-    
-    // TODO: Replace with actual wallet signature
-    // For now, generate a random key
-    const key = await generateKey();
-    
-    // Read file as ArrayBuffer
-    const fileBuffer = await file.arrayBuffer();
-    const fileData = new Uint8Array(fileBuffer);
-    
-    // Generate random IV (initialization vector)
-    const iv = window.crypto.getRandomValues(new Uint8Array(12));
-    
-    // Encrypt the file
-    const encryptedData = await window.crypto.subtle.encrypt(
-      {
-        name: 'AES-GCM',
-        iv: iv,
-      },
-      key,
-      fileData
-    );
-    
-    console.log('✅ File encrypted successfully');
-    
-    // Export key for storage
-    const exportedKey = await exportKey(key);
-    
-    // Create encrypted blob
-    const encryptedBlob = new Blob([encryptedData], { type: 'application/octet-stream' });
-    const encryptedFile = new File(
-      [encryptedBlob],
+export async function generateShareKey() {
+  const shareKey = await crypto.subtle.generateKey(
+    { name: 'AES-KW', length: 256 },
+    true,
+    ['wrapKey', 'unwrapKey']
+  );
+  const raw = await crypto.subtle.exportKey('raw', shareKey);
+  return { shareKey, shareKeyB64: _bufToB64(raw) };
+}
+
+/** Import a raw share key from its base64 representation (read from URL fragment). */
+export async function importShareKey(shareKeyB64) {
+  return crypto.subtle.importKey(
+    'raw',
+    _b64ToBuf(shareKeyB64),
+    { name: 'AES-KW' },
+    false,
+    ['wrapKey', 'unwrapKey']
+  );
+}
+
+/** Wrap a file key with the share key for storage in share_links. */
+export async function wrapFileKeyWithShareKey(fileKey, shareKey) {
+  const wrapped = await crypto.subtle.wrapKey('raw', fileKey, shareKey, 'AES-KW');
+  return _bufToB64(wrapped);
+}
+
+/** Unwrap a file key that was wrapped with a share key. */
+export async function unwrapFileKeyWithShareKey(wrappedKeyB64, shareKey) {
+  return crypto.subtle.unwrapKey(
+    'raw',
+    _b64ToBuf(wrappedKeyB64),
+    shareKey,
+    'AES-KW',
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+// ─── v1 backward-compat key import ───────────────────────────────────────────
+
+/**
+ * Import a plain base64 file key (v1 records stored the key unprotected).
+ * Returns extractable CryptoKey so it can be wrapped during migration.
+ */
+export async function importPlainKey(base64Key) {
+  return crypto.subtle.importKey(
+    'raw',
+    _b64ToBuf(base64Key),
+    { name: 'AES-GCM', length: 256 },
+    true,                    // extractable so migration can re-wrap with KEK
+    ['encrypt', 'decrypt']
+  );
+}
+
+// ─── Encrypt ──────────────────────────────────────────────────────────────────
+
+/**
+ * Encrypt a file and wrap its key with the user's KEK.
+ *
+ * @param {File}      file - The file to encrypt
+ * @param {CryptoKey} kek  - The user's Key Encryption Key (from getOrDeriveKEK)
+ * @returns {Promise<{ encryptedFile: File, metadata: object }>}
+ */
+export async function encryptFile(file, kek) {
+  // Generate a unique random file key
+  const fileKey = await crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: 256 },
+    true,  // extractable so we can wrap it
+    ['encrypt', 'decrypt']
+  );
+
+  // Random IV
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  // Encrypt the file
+  const encryptedData = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    fileKey,
+    await file.arrayBuffer()
+  );
+
+  // Wrap the file key with the KEK before storing
+  const wrappedKey = await wrapFileKey(fileKey, kek);
+
+  return {
+    encryptedFile: new File(
+      [encryptedData],
       `encrypted_${file.name}`,
       { type: 'application/octet-stream' }
-    );
-    
-    // Return encrypted file and metadata
-    return {
-      encryptedFile,
-      metadata: {
-        originalFileName: file.name,
-        originalFileType: file.type,
-        originalFileSize: file.size,
-        encryptedKey: exportedKey,
-        iv: btoa(String.fromCharCode(...iv)), // Base64 encode IV
-        walletAddress: walletAddress,
-        encryptedAt: new Date().toISOString(),
-        algorithm: 'AES-256-GCM',
-        encrypted: true,
-      },
-    };
-  } catch (error) {
-    console.error('❌ Encryption error:', error);
-    throw new Error(`Encryption failed: ${error.message}`);
-  }
+    ),
+    metadata: {
+      originalFileName: file.name,
+      originalFileType: file.type,
+      originalFileSize: file.size,
+      encryptedKey: wrappedKey,        // KEK-wrapped — not a plain key
+      iv: _bufToB64(iv),
+      encryptedAt: new Date().toISOString(),
+      algorithm: 'AES-256-GCM',
+      keyVersion: 2,                   // v2 = KEK-wrapped scheme
+      encrypted: true,
+    },
+  };
+}
+
+// ─── Decrypt ──────────────────────────────────────────────────────────────────
+
+/** Internal: decrypt with a resolved CryptoKey. */
+async function _decryptWithKey(encryptedData, fileKey, base64Iv) {
+  return crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: _b64ToBuf(base64Iv) },
+    fileKey,
+    encryptedData
+  );
 }
 
 /**
- * Decrypt a file using AES-256-GCM
- * @param {ArrayBuffer} encryptedData - The encrypted file data
- * @param {string} base64Key - Base64-encoded encryption key
- * @param {string} base64Iv - Base64-encoded IV
- * @returns {Promise<ArrayBuffer>} Decrypted file data
+ * v1 — decrypt using a plain base64 key stored in Supabase.
+ * Kept for backward compatibility with records uploaded before this change.
  */
 export async function decryptFile(encryptedData, base64Key, base64Iv) {
-  try {
-    console.log('🔓 Starting decryption...');
-    
-    // Import the key
-    const key = await importKey(base64Key);
-    
-    // Decode IV
-    const iv = Uint8Array.from(atob(base64Iv), c => c.charCodeAt(0));
-    
-    // Decrypt
-    const decryptedData = await window.crypto.subtle.decrypt(
-      {
-        name: 'AES-GCM',
-        iv: iv,
-      },
-      key,
-      encryptedData
-    );
-    
-    console.log('✅ File decrypted successfully');
-    return decryptedData;
-  } catch (error) {
-    console.error('❌ Decryption error:', error);
-    throw new Error(`Decryption failed: ${error.message}`);
-  }
+  const key = await importPlainKey(base64Key);
+  return _decryptWithKey(encryptedData, key, base64Iv);
 }
 
 /**
- * Re-encrypt a file key for a provider
- * TODO: Implement when adding grant access feature
- * @param {string} encryptedKey - The original encrypted key
- * @param {string} providerPublicKey - Provider's public key
- * @returns {Promise<string>} Re-encrypted key for provider
+ * v2 — decrypt using a KEK-wrapped file key (owner download).
  */
-export async function reEncryptKeyForProvider(encryptedKey, providerPublicKey) {
-  // This will use RSA-OAEP to encrypt the symmetric key with provider's public key
-  // Implementation coming in grant access feature
-  throw new Error('Not implemented yet - coming in grant access feature');
+export async function decryptFileV2(encryptedData, wrappedKeyB64, base64Iv, kek) {
+  const key = await unwrapFileKey(wrappedKeyB64, kek);
+  return _decryptWithKey(encryptedData, key, base64Iv);
+}
+
+/**
+ * Share link v2 — decrypt using a share-key-wrapped file key.
+ * The share key comes from the URL fragment and never touched any server.
+ */
+export async function decryptFileWithShareKey(encryptedData, wrappedKeyB64, base64Iv, shareKeyB64) {
+  const shareKey = await importShareKey(shareKeyB64);
+  const fileKey = await unwrapFileKeyWithShareKey(wrappedKeyB64, shareKey);
+  return _decryptWithKey(encryptedData, fileKey, base64Iv);
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function _bufToB64(buffer) {
+  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+}
+
+function _b64ToBuf(base64) {
+  return Uint8Array.from(atob(base64), c => c.charCodeAt(0));
 }

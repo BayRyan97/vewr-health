@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { encryptFile } from '../lib/webCryptoEncryption';
+import { useWallets, usePrivy } from '@privy-io/react-auth';
+import { encryptFile, getOrDeriveKEK } from '../lib/webCryptoEncryption';
 import { RECORD_TYPES } from '../pages/PatientHome';
 
 const T = '#00A19C';
@@ -15,6 +16,8 @@ const inputStyle = {
 };
 
 function UploadRecord({ onUploadSuccess }) {
+  const { wallets } = useWallets();
+  const { user } = usePrivy();
   const [file, setFile] = useState(null);
   const [stage, setStage] = useState('idle'); // idle | encrypting | uploading | done | error
   const [cid, setCid] = useState(null);
@@ -71,7 +74,14 @@ function UploadRecord({ onUploadSuccess }) {
 
     try {
       setStage('encrypting');
-      const { encryptedFile, metadata } = await encryptFile(file, 'vewr-user');
+
+      // Derive the session KEK from the user's Privy embedded wallet
+      const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
+      if (!embeddedWallet) {
+        throw new Error('Your secure vault is still loading. Please wait a moment and try again.');
+      }
+      const kek = await getOrDeriveKEK(embeddedWallet, user?.id || 'unknown');
+      const { encryptedFile, metadata } = await encryptFile(file, kek);
 
       setStage('uploading');
       const formData = new FormData();

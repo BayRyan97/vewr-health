@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { getShareLink, recordShareLinkView } from '../lib/shareLinks';
-import { decryptFile } from '../lib/webCryptoEncryption';
+import { decryptFile, decryptFileWithShareKey } from '../lib/webCryptoEncryption';
 
 const T = '#00A19C';
 const FONT = '"Gotham SSm A", "Gotham SSm B", system-ui, -apple-system, sans-serif';
@@ -92,7 +92,13 @@ export default function ShareView() {
       const encryptedData = await fetchFromIPFS(link.cid);
 
       setStatus('decrypting');
-      const decryptedData = await decryptFile(encryptedData, link.encrypted_key, link.iv);
+
+      // v2 share link: share key in URL fragment, file key wrapped server-side
+      // v1 share link: plain file key stored in DB (legacy, backward compat)
+      const shareKeyB64 = window.location.hash.slice(1);
+      const decryptedData = shareKeyB64
+        ? await decryptFileWithShareKey(encryptedData, link.encrypted_key, link.iv, shareKeyB64)
+        : await decryptFile(encryptedData, link.encrypted_key, link.iv);
 
       const blob = new Blob([decryptedData], { type: link.file_type || 'application/octet-stream' });
 
