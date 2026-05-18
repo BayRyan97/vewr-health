@@ -1465,6 +1465,18 @@ function Dashboard({ userEmail, userId, onLogout }) {
     track('portal_viewed', { user_id: userId });
   }, [userId]);
 
+  // Register / update the user row so the owner can see who has signed up
+  useEffect(() => {
+    if (!isSupabaseConfigured || !userId || !userEmail) return;
+    supabase
+      .from('users')
+      .upsert(
+        { user_id: userId, email: userEmail, last_seen_at: new Date().toISOString() },
+        { onConflict: 'user_id' }
+      )
+      .then(() => {}); // fire and forget
+  }, [userId, userEmail]);
+
   useEffect(() => {
     const loadRecords = async () => {
       if (isSupabaseConfigured) {
