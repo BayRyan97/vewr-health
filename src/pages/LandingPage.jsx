@@ -147,9 +147,282 @@ function FaqSection({ T, AMBER, ROSE }) {
 }
 
 
+// ─── Portal Entry Modal ───────────────────────────────────────────────────────
+const GATE_HASH = 'Get0ut123!@#';
+const SESSION_KEY = 'vewr_portal_access';
+function unlockPortal() { try { sessionStorage.setItem(SESSION_KEY, '1'); } catch {} }
+
+function PortalModal({ onClose, navigate }) {
+  const [step, setStep] = useState('password'); // password | role | npi | npiConfirm
+  const [password, setPassword] = useState('');
+  const [pwError, setPwError] = useState(false);
+  const [shake, setShake] = useState(false);
+  const [npiInput, setNpiInput] = useState('');
+  const [npiData, setNpiData] = useState(null);
+  const [npiLoading, setNpiLoading] = useState(false);
+  const [npiError, setNpiError] = useState('');
+
+  const submitPassword = (e) => {
+    e.preventDefault();
+    if (password === GATE_HASH) {
+      unlockPortal();
+      setStep('role');
+      setPassword('');
+    } else {
+      setPwError(true);
+      setShake(true);
+      setPassword('');
+      setTimeout(() => setShake(false), 500);
+    }
+  };
+
+  const handleNpiLookup = async (e) => {
+    e.preventDefault();
+    const cleaned = npiInput.replace(/\D/g, '');
+    if (cleaned.length !== 10) { setNpiError('NPI must be exactly 10 digits.'); return; }
+    setNpiLoading(true); setNpiError('');
+    try {
+      const res = await fetch(`/api/npi?number=${cleaned}`);
+      const data = await res.json();
+      if (!data.result_count || data.result_count === 0) {
+        setNpiError('No provider found for that NPI.'); setNpiLoading(false); return;
+      }
+      const r = data.results[0];
+      if (r.basic?.status !== 'A') {
+        setNpiError('This NPI is not active.'); setNpiLoading(false); return;
+      }
+      const isOrg = r.enumeration_type === 'NPI-2';
+      const tax = (r.taxonomies || []).find(t => t.primary) || r.taxonomies?.[0] || {};
+      setNpiData({
+        npi: r.number,
+        firstName: isOrg ? null : r.basic?.first_name,
+        lastName: isOrg ? null : r.basic?.last_name,
+        organizationName: isOrg ? r.basic?.organization_name : null,
+        credential: r.basic?.credential || null,
+        taxonomy: tax.desc || null,
+        isOrg,
+      });
+      setStep('npiConfirm');
+    } catch {
+      setNpiError('Could not reach the NPPES registry. Please try again.');
+    }
+    setNpiLoading(false);
+  };
+
+  const overlayStyle = {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    zIndex: 1000, padding: '24px', backdropFilter: 'blur(4px)',
+  };
+  const cardStyle = {
+    background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '20px', padding: '44px',
+    width: '100%', maxWidth: '420px', position: 'relative',
+    boxShadow: '0 24px 80px rgba(0,0,0,0.6)',
+    fontFamily: '"Gotham SSm A","Gotham SSm B",system-ui,-apple-system,sans-serif',
+  };
+
+  return (
+    <div style={overlayStyle} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <style>{`
+        @keyframes vw-shake {
+          0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)}
+          40%{transform:translateX(8px)} 60%{transform:translateX(-6px)} 80%{transform:translateX(6px)}
+        }
+        .vw-shake { animation: vw-shake 0.45s ease; }
+      `}</style>
+
+      <div style={cardStyle} className={shake ? 'vw-shake' : ''}>
+        {/* Top accent */}
+        <div style={{
+          position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
+          width: '60px', height: '3px', background: T, borderRadius: '0 0 4px 4px',
+        }} />
+        {/* Close */}
+        <button onClick={onClose} style={{
+          position: 'absolute', top: '16px', right: '16px',
+          background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)',
+          fontSize: '20px', cursor: 'pointer', lineHeight: 1, padding: '4px 8px',
+        }}>✕</button>
+
+        {/* Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '28px' }}>
+          <div style={{
+            width: '34px', height: '34px', borderRadius: '8px', background: T,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: `0 0 18px ${T}50`,
+          }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+          </div>
+          <span style={{ fontSize: '17px', fontWeight: '700', color: 'white', letterSpacing: '-0.3px' }}>
+            Vewr Health
+          </span>
+        </div>
+
+        {/* Step: password */}
+        {step === 'password' && (
+          <>
+            <h2 style={{ color: 'white', fontSize: '20px', fontWeight: '700', margin: '0 0 8px 0', letterSpacing: '-0.4px' }}>
+              Sign in to portal
+            </h2>
+            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', margin: '0 0 24px 0' }}>
+              Enter your access code to continue.
+            </p>
+            <form onSubmit={submitPassword}>
+              <input
+                type="password" placeholder="Access code" value={password} autoFocus
+                onChange={e => { setPassword(e.target.value); setPwError(false); }}
+                style={{
+                  width: '100%', padding: '12px 16px', boxSizing: 'border-box',
+                  background: '#161b22', border: `1px solid ${pwError ? '#f87171' : 'rgba(255,255,255,0.1)'}`,
+                  borderRadius: '10px', color: 'white', fontSize: '15px',
+                  fontFamily: 'inherit', outline: 'none', letterSpacing: '2px',
+                }}
+              />
+              {pwError && <p style={{ color: '#f87171', fontSize: '12px', margin: '8px 0 0 0' }}>Incorrect code.</p>}
+              <button type="submit" style={{
+                width: '100%', marginTop: '14px', padding: '13px',
+                background: T, color: 'white', border: 'none', borderRadius: '10px',
+                fontSize: '15px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit',
+                boxShadow: `0 4px 16px ${T}40`,
+              }}>Continue</button>
+            </form>
+          </>
+        )}
+
+        {/* Step: role selection */}
+        {step === 'role' && (
+          <>
+            <h2 style={{ color: 'white', fontSize: '20px', fontWeight: '700', margin: '0 0 8px 0', letterSpacing: '-0.4px' }}>
+              Who are you?
+            </h2>
+            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', margin: '0 0 24px 0' }}>
+              Select your role to continue to the right portal.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <button onClick={() => navigate('/patient')} style={{
+                padding: '18px 20px', background: '#161b22',
+                border: '1px solid rgba(255,255,255,0.1)', borderRadius: '14px',
+                color: 'white', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+                transition: 'border-color 0.2s',
+              }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = T; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+              >
+                <div style={{ fontSize: '15px', fontWeight: '700', marginBottom: '4px' }}>🧑‍⚕️ I'm a Patient</div>
+                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>
+                  Upload, manage, and share your health records.
+                </div>
+              </button>
+              <button onClick={() => setStep('npi')} style={{
+                padding: '18px 20px', background: '#161b22',
+                border: '1px solid rgba(255,255,255,0.1)', borderRadius: '14px',
+                color: 'white', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+                transition: 'border-color 0.2s',
+              }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = T; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+              >
+                <div style={{ fontSize: '15px', fontWeight: '700', marginBottom: '4px' }}>🩺 I'm a Healthcare Provider</div>
+                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>
+                  View records shared with you by your patients.
+                </div>
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Step: HCP NPI entry */}
+        {step === 'npi' && (
+          <>
+            <button onClick={() => setStep('role')} style={{
+              background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)',
+              fontSize: '13px', cursor: 'pointer', padding: '0 0 16px 0', fontFamily: 'inherit',
+            }}>← Back</button>
+            <h2 style={{ color: 'white', fontSize: '20px', fontWeight: '700', margin: '0 0 8px 0', letterSpacing: '-0.4px' }}>
+              Verify your NPI
+            </h2>
+            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', margin: '0 0 24px 0' }}>
+              Enter your 10-digit National Provider Identifier.
+            </p>
+            <form onSubmit={handleNpiLookup}>
+              <input
+                type="text" inputMode="numeric" placeholder="1234567890" autoFocus
+                value={npiInput}
+                onChange={e => { setNpiInput(e.target.value.replace(/\D/g, '').slice(0, 10)); setNpiError(''); }}
+                style={{
+                  width: '100%', padding: '12px 16px', boxSizing: 'border-box',
+                  background: '#161b22', border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '10px', color: 'white', fontSize: '16px', letterSpacing: '2px',
+                  fontFamily: 'inherit', outline: 'none',
+                }}
+              />
+              {npiError && <p style={{ color: '#f87171', fontSize: '12px', margin: '8px 0 0 0' }}>{npiError}</p>}
+              <button type="submit" disabled={npiLoading || npiInput.length < 10} style={{
+                width: '100%', marginTop: '14px', padding: '13px',
+                background: npiInput.length < 10 ? 'rgba(0,161,156,0.4)' : T,
+                color: 'white', border: 'none', borderRadius: '10px',
+                fontSize: '15px', fontWeight: '600', fontFamily: 'inherit',
+                cursor: npiInput.length < 10 ? 'not-allowed' : 'pointer',
+              }}>
+                {npiLoading ? 'Looking up…' : 'Look up NPI'}
+              </button>
+            </form>
+          </>
+        )}
+
+        {/* Step: HCP NPI confirm */}
+        {step === 'npiConfirm' && npiData && (
+          <>
+            <h2 style={{ color: 'white', fontSize: '20px', fontWeight: '700', margin: '0 0 6px 0', letterSpacing: '-0.4px' }}>
+              Is this you?
+            </h2>
+            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', margin: '0 0 20px 0' }}>
+              Found in the NPPES registry.
+            </p>
+            <div style={{
+              background: '#161b22', border: `1px solid ${T}30`,
+              borderRadius: '12px', padding: '18px 20px', marginBottom: '20px',
+            }}>
+              <div style={{ color: 'white', fontSize: '17px', fontWeight: '700', marginBottom: '4px' }}>
+                {npiData.isOrg
+                  ? npiData.organizationName
+                  : `${npiData.firstName || ''} ${npiData.lastName || ''}`.trim()}
+                {npiData.credential ? `, ${npiData.credential}` : ''}
+              </div>
+              {npiData.taxonomy && (
+                <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', marginBottom: '4px' }}>{npiData.taxonomy}</div>
+              )}
+              <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px', fontFamily: 'monospace' }}>
+                NPI {npiData.npi}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => { setStep('npi'); setNpiData(null); }} style={{
+                flex: 1, padding: '12px', background: 'transparent',
+                border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px',
+                color: 'rgba(255,255,255,0.6)', fontSize: '14px', fontWeight: '600',
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}>Not me</button>
+              <button onClick={() => navigate('/provider')} style={{
+                flex: 2, padding: '12px', background: T, border: 'none',
+                borderRadius: '10px', color: 'white', fontSize: '14px', fontWeight: '600',
+                cursor: 'pointer', fontFamily: 'inherit', boxShadow: `0 4px 14px ${T}40`,
+              }}>Continue to sign in →</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function LandingPage() {
   const [email, setEmail] = useState('');
   const [submitState, setSubmitState] = useState('idle');
+  const [showPortalModal, setShowPortalModal] = useState(false);
   const navigate = useNavigate();
 
 
@@ -229,13 +502,13 @@ function LandingPage() {
             Vewr Health
           </span>
         </div>
-        <button onClick={() => navigate('/patient')} style={{
+        <button onClick={() => setShowPortalModal(true)} style={{
           padding: '7px 18px', background: 'rgba(0,161,156,0.15)',
           color: T, border: `1px solid ${T}50`,
           borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600',
           transition: 'all 0.2s',
         }}>
-          Patient Portal →
+          Sign in to portal →
         </button>
       </nav>
 
@@ -1012,7 +1285,9 @@ function LandingPage() {
         </div>
       </footer>
 
-
+      {showPortalModal && (
+        <PortalModal onClose={() => setShowPortalModal(false)} navigate={navigate} />
+      )}
     </div>
   );
 }

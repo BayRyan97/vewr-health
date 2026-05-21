@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { usePrivy, useWallets, useCreateWallet } from '@privy-io/react-auth';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { getOrDeriveKEK, generateECDHKeyPair, wrapECDHPrivateKey } from '../lib/webCryptoEncryption';
+import PortalGate from '../components/PortalGate';
 
 const T = '#00A19C';
 const T_DARK = '#007F7B';
@@ -678,7 +679,7 @@ function ProviderDashboard({ providerData, providerId, userEmail, onSignOut }) {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-function ProviderHome() {
+function ProviderPortalInner() {
   const { ready, authenticated, user, login, logout } = usePrivy();
   const { wallets } = useWallets();
   const { createWallet } = useCreateWallet();
@@ -769,6 +770,10 @@ function ProviderHome() {
       onSignOut={logout}
     />
   );
+}
+
+function ProviderHome() {
+  return <PortalGate><ProviderPortalInner /></PortalGate>;
 }
 
 export default ProviderHome;

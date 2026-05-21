@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { usePrivy, useWallets, useCreateWallet } from '@privy-io/react-auth';
 import UploadRecord from '../components/UploadRecord';
+import PortalGate from '../components/PortalGate';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import {
   decryptFile,
@@ -2227,7 +2228,7 @@ function PatientHome() {
   if (!PRIVY_CONFIGURED) {
     return <SetupNotice />;
   }
-  return <PrivyGatedPortal />;
+  return <PortalGate><PrivyGatedPortal /></PortalGate>;
 }
 
 export default PatientHome;
