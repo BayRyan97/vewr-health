@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { getShareLink, recordShareLinkView } from '../lib/shareLinks';
 import { decryptFile, decryptFileWithShareKey } from '../lib/webCryptoEncryption';
+import { logAccess } from '../lib/auditLog';
 
 const T = '#00A19C';
 const FONT = '"Gotham SSm A", "Gotham SSm B", system-ui, -apple-system, sans-serif';
@@ -100,6 +101,7 @@ export default function ShareView() {
         ? await decryptFileWithShareKey(encryptedData, link.encrypted_key, link.iv, shareKeyB64)
         : await decryptFile(encryptedData, link.encrypted_key, link.iv);
 
+      logAccess({ action: 'share_viewed', shareToken: token, fileName: link.file_name, fileType: link.file_type });
       const blob = new Blob([decryptedData], { type: link.file_type || 'application/octet-stream' });
 
       if (isImage) {

@@ -13,6 +13,7 @@ import {
   wrapFileKeyWithShareKey,
 } from '../lib/webCryptoEncryption';
 import { createShareLink, getShareLinksForRecord, revokeShareLink, getAllShareLinksForUser } from '../lib/shareLinks';
+import { logAccess, getAccessLog } from '../lib/auditLog';
 
 const T = '#00A19C';
 const T_DARK = '#007F7B';
@@ -320,6 +321,7 @@ function SharePanel({ record, userId, onClose }) {
       const url = `${window.location.origin}/share/${data.token}?k=${encodeURIComponent(shareKeyB64)}`;
       setGeneratedUrl(url);
       track('record_shared', { file_type: record.metadata?.originalFileType, expiry_hours: Math.round(hours) });
+      logAccess({ action: 'share_created', userId, recordId: record.id, fileName: record.metadata?.originalFileName, fileType: record.metadata?.originalFileType, shareToken: data.token });
       await loadLinks();
     } catch (err) {
       setShareError(err.message || 'Failed to create share link. Please try again.');
@@ -337,8 +339,10 @@ function SharePanel({ record, userId, onClose }) {
 
   const handleRevoke = async (linkId) => {
     setRevoking(prev => ({ ...prev, [linkId]: true }));
+    const link = activeLinks.find(l => l.id === linkId);
     await revokeShareLink(linkId);
     track('share_link_revoked');
+    logAccess({ action: 'share_revoked', userId, recordId: record.id, fileName: link?.file_name, fileType: link?.file_type, shareToken: link?.token });
     await loadLinks();
     setRevoking(prev => ({ ...prev, [linkId]: false }));
   };
@@ -673,6 +677,7 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
 
       // Trigger browser download
       track('record_downloaded', { file_type: originalFileType });
+      logAccess({ action: 'download', userId, recordId: id, fileName: originalFileName, fileType: originalFileType });
       const blob = new Blob([decryptedData], { type: originalFileType || 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1264,6 +1269,102 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
   );
 }
 
+// ─── Activity Tab ─────────────────────────────────────────────────────────────
+const ACTION_META = {
+  upload:        { label: 'Uploaded',      color: '#059669', bg: '#ecfdf5', icon: '↑' },
+  download:      { label: 'Downloaded',    color: '#2563eb', bg: '#eff6ff', icon: '↓' },
+  share_created: { label: 'Share created', color: T,         bg: '#f0fdfb', icon: '⤴' },
+  share_viewed:  { label: 'Share viewed',  color: '#7c3aed', bg: '#f5f3ff', icon: '👁' },
+  share_revoked: { label: 'Share revoked', color: '#dc2626', bg: '#fef2f2', icon: '✕' },
+  delete:        { label: 'Deleted',       color: '#9ca3af', bg: '#f9fafb', icon: '🗑' },
+};
+
+function ActivityTab({ userId }) {
+  const [log, setLog] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const { data } = await getAccessLog(userId);
+      setLog(data || []);
+      setLoading(false);
+    })();
+  }, [userId]);
+
+  const formatTime = (ts) => {
+    const d = new Date(ts);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  };
+
+  if (loading) return (
+    <div style={{ textAlign: 'center', padding: '60px 0', color: '#9ca3af', fontSize: '14px' }}>
+      Loading activity…
+    </div>
+  );
+
+  if (log.length === 0) return (
+    <div style={{ textAlign: 'center', padding: '60px 0' }}>
+      <div style={{ fontSize: '32px', marginBottom: '12px' }}>📋</div>
+      <div style={{ color: '#374151', fontWeight: '600', fontSize: '15px', marginBottom: '6px' }}>No activity yet</div>
+      <div style={{ color: '#9ca3af', fontSize: '13px' }}>Uploads, downloads, and share events will appear here.</div>
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {log.map(entry => {
+        const meta = ACTION_META[entry.action] || { label: entry.action, color: '#6b7280', bg: '#f9fafb', icon: '•' };
+        return (
+          <div key={entry.id} style={{
+            background: 'white', borderRadius: '12px',
+            border: '1px solid #e5e7eb', padding: '14px 18px',
+            display: 'flex', alignItems: 'center', gap: '14px',
+          }}>
+            {/* Icon */}
+            <div style={{
+              width: '36px', height: '36px', borderRadius: '9px', flexShrink: 0,
+              background: meta.bg, border: `1px solid ${meta.color}30`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '15px', color: meta.color, fontWeight: '700',
+            }}>
+              {meta.icon}
+            </div>
+
+            {/* Details */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{
+                  fontSize: '12px', fontWeight: '600', color: meta.color,
+                  background: meta.bg, padding: '2px 8px', borderRadius: '100px',
+                  border: `1px solid ${meta.color}30`,
+                }}>
+                  {meta.label}
+                </span>
+                {entry.file_name && (
+                  <span style={{ fontSize: '14px', fontWeight: '500', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '260px' }}>
+                    {entry.file_name}
+                  </span>
+                )}
+              </div>
+              {entry.share_token && (
+                <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '3px', fontFamily: 'monospace' }}>
+                  token: {entry.share_token.slice(0, 12)}…
+                </div>
+              )}
+            </div>
+
+            {/* Timestamp */}
+            <div style={{ fontSize: '12px', color: '#9ca3af', flexShrink: 0, textAlign: 'right' }}>
+              {formatTime(entry.created_at)}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Links Tab ────────────────────────────────────────────────────────────────
 function LinksTab({ userId }) {
   const [links, setLinks] = useState([]);
@@ -1282,8 +1383,10 @@ function LinksTab({ userId }) {
 
   const handleRevoke = async (linkId) => {
     setRevoking(prev => ({ ...prev, [linkId]: true }));
+    const link = links.find(l => l.id === linkId);
     await revokeShareLink(linkId);
     track('share_link_revoked', { source: 'links_tab' });
+    logAccess({ action: 'share_revoked', userId, recordId: link?.record_id, fileName: link?.file_name, fileType: link?.file_type, shareToken: link?.token });
     await load();
     setRevoking(prev => ({ ...prev, [linkId]: false }));
   };
@@ -1636,6 +1739,7 @@ function Dashboard({ userEmail, userId, onLogout }) {
 
     // 3. Remove from UI
     track('record_deleted');
+    logAccess({ action: 'delete', userId, recordId: id, fileName: record.metadata?.originalFileName, fileType: record.metadata?.originalFileType });
     setRecords(prev => prev.filter(r => r.id !== id));
   };
 
@@ -1668,6 +1772,7 @@ function Dashboard({ userEmail, userId, onLogout }) {
       } catch (e) {}
     }
     track('record_uploaded', { file_type: record.metadata?.originalFileType });
+    logAccess({ action: 'upload', userId, recordId: record.id, fileName: record.metadata?.originalFileName, fileType: record.metadata?.originalFileType });
   };
 
   return (
@@ -1814,6 +1919,7 @@ function Dashboard({ userEmail, userId, onLogout }) {
             { id: 'upload', label: 'Upload New' },
             { id: 'records', label: `My Records (${records.length})` },
             { id: 'links', label: 'Share Links' },
+            { id: 'activity', label: 'Activity' },
           ].map(tab => (
             <button
               key={tab.id}
@@ -1842,6 +1948,7 @@ function Dashboard({ userEmail, userId, onLogout }) {
           />
         )}
         {activeTab === 'links' && <LinksTab userId={userId} />}
+        {activeTab === 'activity' && <ActivityTab userId={userId} />}
       </div>
     </div>
   );
