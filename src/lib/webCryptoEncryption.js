@@ -6,20 +6,29 @@
  *   KEK  (Key Encryption Key)
  *     ↑  derived via PBKDF2 from the user's Privy embedded-wallet signature
  *     ↑  never stored anywhere — re-derived fresh each session, lives in memory only
- *
- *   File Key  (AES-256-GCM, unique per file)
- *     ↑  wrapped (encrypted) with the KEK before being stored
- *     ↑  stored as an opaque blob in records.metadata.encryptedKey  (keyVersion: 2)
+ *     │
+ *     ├─ wraps → File Key  (AES-256-GCM, unique per file)
+ *     │            stored as an opaque blob in records.metadata.encryptedKey (keyVersion: 2)
+ *     │
+ *     └─ wraps → ECDH Private Key  (P-256, one per user)
+ *                  stored wrapped in users/providers table
+ *                  used for cross-user file key exchange (patient ↔ HCP)
  *
  *   Share Key  (AES-256-KW, unique per share link)
- *     ↑  random, placed in the URL fragment (#...) — never reaches any server
+ *     ↑  random, placed in the URL as ?k= — never reaches any server
  *     ↑  the file key is wrapped with this share key and stored in share_links.encrypted_key
- *     ↑  revoking a share link deletes the server's copy of the wrapped file key,
- *        making the URL useless even if the recipient kept it
+ *     ↑  revoking a share link deletes the server's copy of the wrapped file key
+ *
+ *   Cross-user file key exchange (ECDH):
+ *     Sender generates ephemeral P-256 key pair
+ *     ECDH(ephemeral_private, recipient_public) → shared secret
+ *     HKDF(shared_secret) → AES-256-KW key
+ *     Wrap file key with AES-256-KW key → stored in provider_access / patient_inbox
+ *     Ephemeral public key stored alongside — recipient re-derives the same shared secret
+ *     Revocation: delete the provider_access row — recipient can no longer decrypt
  *
  *  Legacy (keyVersion: 1 / no keyVersion):
- *     Plain base64 file key stored in Supabase — these records are migrated to v2
- *     automatically on next login. Backward-compat decrypt functions are kept below.
+ *     Plain base64 file key stored in Supabase — migrated to v2 automatically on login.
  */
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -299,6 +308,170 @@ export async function decryptFileWithShareKey(encryptedData, wrappedKeyB64, base
   const shareKey = await importShareKey(shareKeyB64);
   const fileKey = await unwrapFileKeyWithShareKey(wrappedKeyB64, shareKey);
   return _decryptWithKey(encryptedData, fileKey, base64Iv);
+}
+
+// ─── ECDH P-256 key pair (cross-user file key exchange) ──────────────────────
+//
+// Each user (patient and HCP) has a P-256 ECDH key pair stored in Supabase:
+//   - Public key:  plaintext base64 — anyone can fetch it to encrypt for that user
+//   - Private key: wrapped with the user's KEK — only the user can unwrap it
+//
+// To share a file key with another user:
+//   1. Fetch their P-256 public key from Supabase
+//   2. Call wrapFileKeyForRecipient() → { ephemeralPublicKeyB64, wrappedFileKeyB64 }
+//   3. Store both values in provider_access / patient_inbox
+//
+// To decrypt a file key wrapped for you:
+//   1. Unwrap your ECDH private key with your KEK
+//   2. Call unwrapFileKeyFromSender() with the ephemeral public key + wrapped file key
+
+/**
+ * Generate a new P-256 ECDH key pair for a user.
+ * Call once on first login; store results in Supabase.
+ *
+ * @returns {Promise<{ publicKeyB64: string, privateKey: CryptoKey }>}
+ */
+export async function generateECDHKeyPair() {
+  const keyPair = await crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' },
+    true,
+    ['deriveKey', 'deriveBits']
+  );
+
+  const publicKeyRaw = await crypto.subtle.exportKey('raw', keyPair.publicKey);
+  return {
+    publicKeyB64: _bufToB64(publicKeyRaw),
+    privateKey: keyPair.privateKey,
+  };
+}
+
+/**
+ * Wrap a P-256 ECDH private key with the user's KEK for Supabase storage.
+ *
+ * @param {CryptoKey} ecdhPrivateKey
+ * @param {CryptoKey} kek
+ * @returns {Promise<string>} base64-encoded wrapped private key
+ */
+export async function wrapECDHPrivateKey(ecdhPrivateKey, kek) {
+  const wrapped = await crypto.subtle.wrapKey('pkcs8', ecdhPrivateKey, kek, 'AES-KW');
+  return _bufToB64(wrapped);
+}
+
+/**
+ * Unwrap a P-256 ECDH private key from Supabase using the user's KEK.
+ *
+ * @param {string} wrappedB64
+ * @param {CryptoKey} kek
+ * @returns {Promise<CryptoKey>}
+ */
+export async function unwrapECDHPrivateKey(wrappedB64, kek) {
+  return crypto.subtle.unwrapKey(
+    'pkcs8',
+    _b64ToBuf(wrappedB64),
+    kek,
+    'AES-KW',
+    { name: 'ECDH', namedCurve: 'P-256' },
+    false,
+    ['deriveKey', 'deriveBits']
+  );
+}
+
+/**
+ * Import a P-256 public key from its base64 raw representation.
+ *
+ * @param {string} publicKeyB64
+ * @returns {Promise<CryptoKey>}
+ */
+async function _importECDHPublicKey(publicKeyB64) {
+  return crypto.subtle.importKey(
+    'raw',
+    _b64ToBuf(publicKeyB64),
+    { name: 'ECDH', namedCurve: 'P-256' },
+    false,
+    []
+  );
+}
+
+/**
+ * Derive a one-time AES-256-KW key from an ECDH shared secret.
+ * Uses HKDF with SHA-256.
+ *
+ * @param {CryptoKey} ecdhPrivateKey  - sender's ephemeral OR recipient's stored private key
+ * @param {CryptoKey} ecdhPublicKey   - the other party's public key
+ * @returns {Promise<CryptoKey>}      - AES-256-KW key for wrapping/unwrapping file keys
+ */
+async function _deriveSharedAESKey(ecdhPrivateKey, ecdhPublicKey) {
+  const sharedBits = await crypto.subtle.deriveBits(
+    { name: 'ECDH', public: ecdhPublicKey },
+    ecdhPrivateKey,
+    256
+  );
+
+  // Run through HKDF to get a proper AES key
+  const hkdfKey = await crypto.subtle.importKey('raw', sharedBits, 'HKDF', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: new TextEncoder().encode('vewr-ecdh-v1'),
+      info: new Uint8Array(0),
+    },
+    hkdfKey,
+    { name: 'AES-KW', length: 256 },
+    false,
+    ['wrapKey', 'unwrapKey']
+  );
+}
+
+/**
+ * Wrap a file key for a specific recipient using their P-256 public key.
+ * The sender generates an ephemeral key pair — the private half is discarded immediately.
+ *
+ * @param {CryptoKey} fileKey             - AES-256-GCM file key to wrap
+ * @param {string}    recipientPublicKeyB64 - recipient's P-256 public key (from Supabase)
+ * @returns {Promise<{ ephemeralPublicKeyB64: string, wrappedFileKeyB64: string }>}
+ *   Store both values in Supabase. The ephemeral public key lets the recipient re-derive
+ *   the shared secret; the wrapped file key is the locked file key.
+ */
+export async function wrapFileKeyForRecipient(fileKey, recipientPublicKeyB64) {
+  // Generate throwaway key pair — private half used once then gone
+  const ephemeral = await crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' },
+    true,
+    ['deriveKey', 'deriveBits']
+  );
+
+  const recipientPub = await _importECDHPublicKey(recipientPublicKeyB64);
+  const sharedKey = await _deriveSharedAESKey(ephemeral.privateKey, recipientPub);
+  const wrappedFileKey = await crypto.subtle.wrapKey('raw', fileKey, sharedKey, 'AES-KW');
+
+  const ephemeralPubRaw = await crypto.subtle.exportKey('raw', ephemeral.publicKey);
+  return {
+    ephemeralPublicKeyB64: _bufToB64(ephemeralPubRaw),
+    wrappedFileKeyB64: _bufToB64(wrappedFileKey),
+  };
+}
+
+/**
+ * Unwrap a file key that was wrapped for this user using ECDH.
+ *
+ * @param {string}    wrappedFileKeyB64    - from Supabase (provider_access / patient_inbox)
+ * @param {string}    ephemeralPublicKeyB64 - from Supabase (stored alongside wrapped key)
+ * @param {CryptoKey} myECDHPrivateKey     - this user's unwrapped P-256 private key
+ * @returns {Promise<CryptoKey>}           - AES-256-GCM file key, ready for decryption
+ */
+export async function unwrapFileKeyFromSender(wrappedFileKeyB64, ephemeralPublicKeyB64, myECDHPrivateKey) {
+  const ephemeralPub = await _importECDHPublicKey(ephemeralPublicKeyB64);
+  const sharedKey = await _deriveSharedAESKey(myECDHPrivateKey, ephemeralPub);
+  return crypto.subtle.unwrapKey(
+    'raw',
+    _b64ToBuf(wrappedFileKeyB64),
+    sharedKey,
+    'AES-KW',
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt']
+  );
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

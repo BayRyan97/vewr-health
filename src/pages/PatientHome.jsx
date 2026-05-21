@@ -11,6 +11,8 @@ import {
   wrapFileKey,
   generateShareKey,
   wrapFileKeyWithShareKey,
+  generateECDHKeyPair,
+  wrapECDHPrivateKey,
 } from '../lib/webCryptoEncryption';
 import { createShareLink, getShareLinksForRecord, revokeShareLink, getAllShareLinksForUser } from '../lib/shareLinks';
 import { logAccess, getAccessLog } from '../lib/auditLog';
@@ -1624,6 +1626,52 @@ function Dashboard({ userEmail, userId, onLogout }) {
     }, 2000);
     return () => clearTimeout(t);
   }, [wallets, createWallet]);
+
+  // ── ECDH key pair setup ───────────────────────────────────────────────────
+  // Generate a P-256 ECDH key pair once on first login and store it in Supabase.
+  // The public key is stored in plaintext so other users can encrypt for this user.
+  // The private key is wrapped with this user's KEK before storage.
+  const ecdhSetupRan = useRef(false);
+  useEffect(() => {
+    if (ecdhSetupRan.current || !isSupabaseConfigured || wallets.length === 0) return;
+    const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
+    if (!embeddedWallet) return;
+
+    (async () => {
+      try {
+        // Check if this user already has an ECDH key pair stored
+        const { data: userRow } = await supabase
+          .from('users')
+          .select('ecdh_public_key')
+          .eq('user_id', userId)
+          .single();
+
+        if (userRow?.ecdh_public_key) {
+          ecdhSetupRan.current = true;
+          return; // Already set up
+        }
+
+        // Generate a new P-256 ECDH key pair
+        const kek = await getOrDeriveKEK(embeddedWallet, userId);
+        const { publicKeyB64, privateKey } = await generateECDHKeyPair();
+        const wrappedPrivateKeyB64 = await wrapECDHPrivateKey(privateKey, kek);
+
+        // Store in the users table
+        await supabase
+          .from('users')
+          .upsert({
+            user_id: userId,
+            ecdh_public_key: publicKeyB64,
+            ecdh_private_key_wrapped: wrappedPrivateKeyB64,
+          }, { onConflict: 'user_id' });
+
+        ecdhSetupRan.current = true;
+      } catch (e) {
+        // Non-fatal — will retry on next login
+      }
+    })();
+  }, [wallets, userId]);
+
   const [activeTab, setActiveTab] = useState('upload');
   const [records, setRecords] = useState([]);
 
