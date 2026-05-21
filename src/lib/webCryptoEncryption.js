@@ -348,28 +348,59 @@ export async function generateECDHKeyPair() {
 /**
  * Wrap a P-256 ECDH private key with the user's KEK for Supabase storage.
  *
+ * AES-KW requires plaintext to be a multiple of 8 bytes. PKCS8-encoded P-256
+ * private keys are 138 bytes (not a multiple of 8), so we can't use
+ * wrapKey('pkcs8', ..., 'AES-KW') directly. Instead:
+ *   1. Export the private key as JWK
+ *   2. Encrypt the JWK bytes with a fresh AES-256-GCM key
+ *   3. Wrap that AES-GCM key with the KEK (AES-KW works fine on 32-byte keys)
+ *   4. Pack: iv(12) | wrappedEncKey(40) | ciphertext → base64
+ *
  * @param {CryptoKey} ecdhPrivateKey
  * @param {CryptoKey} kek
- * @returns {Promise<string>} base64-encoded wrapped private key
+ * @returns {Promise<string>} base64-encoded packed blob
  */
 export async function wrapECDHPrivateKey(ecdhPrivateKey, kek) {
-  const wrapped = await crypto.subtle.wrapKey('pkcs8', ecdhPrivateKey, kek, 'AES-KW');
-  return _bufToB64(wrapped);
+  const jwk = await crypto.subtle.exportKey('jwk', ecdhPrivateKey);
+  const plaintext = new TextEncoder().encode(JSON.stringify(jwk));
+
+  const encKey = await crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']
+  );
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, encKey, plaintext);
+
+  // AES-256 key = 32 bytes; AES-KW adds 8 bytes → wrapped = 40 bytes
+  const wrappedEncKey = await crypto.subtle.wrapKey('raw', encKey, kek, 'AES-KW');
+
+  const result = new Uint8Array(12 + 40 + ciphertext.byteLength);
+  result.set(iv, 0);
+  result.set(new Uint8Array(wrappedEncKey), 12);
+  result.set(new Uint8Array(ciphertext), 52);
+  return _bufToB64(result);
 }
 
 /**
- * Unwrap a P-256 ECDH private key from Supabase using the user's KEK.
+ * Unwrap a P-256 ECDH private key stored by wrapECDHPrivateKey.
  *
  * @param {string} wrappedB64
  * @param {CryptoKey} kek
  * @returns {Promise<CryptoKey>}
  */
 export async function unwrapECDHPrivateKey(wrappedB64, kek) {
-  return crypto.subtle.unwrapKey(
-    'pkcs8',
-    _b64ToBuf(wrappedB64),
-    kek,
-    'AES-KW',
+  const buf = _b64ToBuf(wrappedB64);
+  const iv = buf.slice(0, 12);
+  const wrappedEncKey = buf.slice(12, 52);
+  const ciphertext = buf.slice(52);
+
+  const encKey = await crypto.subtle.unwrapKey(
+    'raw', wrappedEncKey, kek, 'AES-KW',
+    { name: 'AES-GCM', length: 256 }, false, ['decrypt']
+  );
+  const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, encKey, ciphertext);
+  const jwk = JSON.parse(new TextDecoder().decode(plaintext));
+  return crypto.subtle.importKey(
+    'jwk', jwk,
     { name: 'ECDH', namedCurve: 'P-256' },
     false,
     ['deriveKey', 'deriveBits']
