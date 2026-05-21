@@ -9,10 +9,9 @@ const FONT = '"Gotham SSm A", "Gotham SSm B", system-ui, -apple-system, sans-ser
 
 // ─── NPPES helpers ────────────────────────────────────────────────────────────
 async function lookupNPI(npi) {
-  const res = await fetch(
-    `https://npiregistry.cms.hhs.gov/api/?number=${encodeURIComponent(npi)}&version=2.1`
-  );
-  if (!res.ok) throw new Error('NPPES API unreachable');
+  // Call our Pages Function proxy — the NPPES API blocks direct browser requests (CORS)
+  const res = await fetch(`/api/npi?number=${encodeURIComponent(npi)}`);
+  if (!res.ok) throw new Error('NPPES proxy error');
   const data = await res.json();
   if (!data.result_count || data.result_count === 0) return null;
   return data.results[0];
@@ -567,7 +566,7 @@ function ProviderHome() {
         .from('providers')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
       setProviderData(data || null);
       setLoadingProvider(false);
     })();
