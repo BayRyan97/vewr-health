@@ -406,7 +406,10 @@ function PortalModal({ onClose, navigate }) {
                 color: 'rgba(255,255,255,0.6)', fontSize: '14px', fontWeight: '600',
                 cursor: 'pointer', fontFamily: 'inherit',
               }}>Not me</button>
-              <button onClick={() => navigate('/provider')} style={{
+              <button onClick={() => {
+                try { sessionStorage.setItem('vewr_pending_npi', JSON.stringify(npiData)); } catch {}
+                navigate('/provider');
+              }} style={{
                 flex: 2, padding: '12px', background: T, border: 'none',
                 borderRadius: '10px', color: 'white', fontSize: '14px', fontWeight: '600',
                 cursor: 'pointer', fontFamily: 'inherit', boxShadow: `0 4px 14px ${T}40`,

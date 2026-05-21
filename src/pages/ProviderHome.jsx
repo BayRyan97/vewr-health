@@ -159,9 +159,18 @@ function LoginScreen({ onLogin }) {
 
 // ─── NPI Verification Form ────────────────────────────────────────────────────
 function NPIVerificationFlow({ userId, embeddedWallet, onVerified }) {
-  const [step, setStep] = useState('enter'); // enter | looking | confirm | saving | error
+  // Check if the landing page modal already verified an NPI and passed it via sessionStorage
+  const pendingNpi = (() => {
+    try {
+      const raw = sessionStorage.getItem('vewr_pending_npi');
+      if (raw) { sessionStorage.removeItem('vewr_pending_npi'); return JSON.parse(raw); }
+    } catch {}
+    return null;
+  })();
+
+  const [step, setStep] = useState(pendingNpi ? 'confirm' : 'enter');
   const [npiInput, setNpiInput] = useState('');
-  const [npiData, setNpiData] = useState(null);
+  const [npiData, setNpiData] = useState(pendingNpi || null);
   const [errorMsg, setErrorMsg] = useState('');
 
   async function handleLookup(e) {
