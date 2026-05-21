@@ -206,10 +206,8 @@ function NPIVerificationFlow({ userId, embeddedWallet, onVerified }) {
   async function handleConfirm() {
     setStep('saving');
     try {
-      const kek = await getOrDeriveKEK(embeddedWallet, userId);
-      const { publicKeyB64, privateKey } = await generateECDHKeyPair();
-      const wrappedPrivateKeyB64 = await wrapECDHPrivateKey(privateKey, kek);
-
+      // Save NPI credentials now — ECDH keys are generated separately once
+      // the embedded wallet is ready (same pattern as the patient portal).
       const { error } = await supabase.from('providers').upsert({
         user_id: userId,
         npi: npiData.npi,
@@ -218,8 +216,6 @@ function NPIVerificationFlow({ userId, embeddedWallet, onVerified }) {
         organization: npiData.organizationName,
         credential: npiData.credential,
         taxonomy: npiData.taxonomy,
-        ecdh_public_key: publicKeyB64,
-        ecdh_private_key_wrapped: wrappedPrivateKeyB64,
         verified_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
 
@@ -709,6 +705,29 @@ function ProviderPortalInner() {
     }, 2000);
     return () => clearTimeout(timer);
   }, [authenticated, ready, wallets, createWallet]);
+
+  // Generate ECDH key pair once the embedded wallet is ready (fire-and-forget)
+  const ecdhSetupRan = useRef(false);
+  useEffect(() => {
+    if (ecdhSetupRan.current || !isSupabaseConfigured || wallets.length === 0) return;
+    const embWallet = wallets.find(w => w.walletClientType === 'privy');
+    if (!embWallet || !userId) return;
+    (async () => {
+      try {
+        const { data: row } = await supabase
+          .from('providers').select('ecdh_public_key').eq('user_id', userId).maybeSingle();
+        if (row?.ecdh_public_key) { ecdhSetupRan.current = true; return; }
+        const kek = await getOrDeriveKEK(embWallet, userId);
+        const { publicKeyB64, privateKey } = await generateECDHKeyPair();
+        const wrappedPrivateKeyB64 = await wrapECDHPrivateKey(privateKey, kek);
+        await supabase.from('providers').upsert(
+          { user_id: userId, ecdh_public_key: publicKeyB64, ecdh_private_key_wrapped: wrappedPrivateKeyB64 },
+          { onConflict: 'user_id' }
+        );
+        ecdhSetupRan.current = true;
+      } catch {}
+    })();
+  }, [wallets, userId]);
 
   // Check if provider is already verified in Supabase
   useEffect(() => {
