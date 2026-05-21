@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePrivy, useWallets, useCreateWallet } from '@privy-io/react-auth';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { getOrDeriveKEK, generateECDHKeyPair, wrapECDHPrivateKey } from '../lib/webCryptoEncryption';
+import { getOrDeriveKEK, generateECDHKeyPair, wrapECDHPrivateKey, unwrapECDHPrivateKey, unwrapFileKeyFromSender } from '../lib/webCryptoEncryption';
 import PortalGate from '../components/PortalGate';
 
 const T = '#00A19C';
@@ -33,6 +33,22 @@ function parseNPIResult(result) {
     status: basic.status || null,
     isOrg,
   };
+}
+
+// ─── IPFS helpers ─────────────────────────────────────────────────────────────
+const IPFS_GATEWAYS = [
+  'https://gateway.pinata.cloud/ipfs/',
+  'https://ipfs.io/ipfs/',
+  'https://cloudflare-ipfs.com/ipfs/',
+];
+async function fetchFromIPFS(cid) {
+  for (const gateway of IPFS_GATEWAYS) {
+    try {
+      const res = await fetch(`${gateway}${cid}`);
+      if (res.ok) return res.arrayBuffer();
+    } catch {}
+  }
+  throw new Error('Could not retrieve file from IPFS.');
 }
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -426,7 +442,7 @@ function NPIVerificationFlow({ userId, embeddedWallet, onVerified }) {
 }
 
 // ─── Provider Dashboard ───────────────────────────────────────────────────────
-function ProviderDashboard({ providerData, providerId, userEmail, onSignOut }) {
+function ProviderDashboard({ providerData, providerId, userEmail, wallets, onSignOut }) {
   const displayName = providerData.isOrg
     ? providerData.organization
     : `${providerData.first_name || ''} ${providerData.last_name || ''}`.trim();
@@ -436,6 +452,13 @@ function ProviderDashboard({ providerData, providerId, userEmail, onSignOut }) {
   const [patientEmail, setPatientEmail] = useState('');
   const [sendingRequest, setSendingRequest] = useState(false);
   const [requestMsg, setRequestMsg] = useState(null); // { type: 'success'|'error', text }
+
+  const [sharedRecords, setSharedRecords] = useState([]);
+  const [loadingShared, setLoadingShared] = useState(true);
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [downloading, setDownloading] = useState({});
+  const [dlError, setDlError] = useState({});
+  const [patientEmails, setPatientEmails] = useState({});
 
   const loadConnections = async () => {
     setLoadingConnections(true);
@@ -449,6 +472,14 @@ function ProviderDashboard({ providerData, providerId, userEmail, onSignOut }) {
   };
 
   useEffect(() => { loadConnections(); }, [providerId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadSharedRecords = async () => {
+    setLoadingShared(true);
+    const { data } = await supabase.from('provider_access').select('*').eq('provider_id', providerId).order('granted_at', { ascending: false });
+    setSharedRecords(data || []);
+    setLoadingShared(false);
+  };
+  useEffect(() => { loadSharedRecords(); }, [providerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSendRequest = async (e) => {
     e.preventDefault();
@@ -484,6 +515,48 @@ function ProviderDashboard({ providerData, providerId, userEmail, onSignOut }) {
       await loadConnections();
     }
     setSendingRequest(false);
+  };
+
+  const patientGroups = {};
+  sharedRecords.forEach(r => {
+    if (!patientGroups[r.patient_id]) patientGroups[r.patient_id] = [];
+    patientGroups[r.patient_id].push(r);
+  });
+
+  useEffect(() => {
+    const ids = Object.keys(patientGroups);
+    if (ids.length === 0) return;
+    supabase.from('users').select('user_id, email').in('user_id', ids).then(({ data }) => {
+      const map = {};
+      (data || []).forEach(u => { map[u.user_id] = u.email; });
+      setPatientEmails(map);
+    });
+  }, [sharedRecords]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleProviderDownload = async (rec) => {
+    const embWallet = wallets.find(w => w.walletClientType === 'privy');
+    if (!embWallet) { setDlError(e => ({ ...e, [rec.id]: 'Wallet not ready.' })); return; }
+    setDownloading(d => ({ ...d, [rec.id]: true }));
+    setDlError(e => ({ ...e, [rec.id]: null }));
+    try {
+      const { data: provRow } = await supabase.from('providers').select('ecdh_private_key_wrapped').eq('user_id', providerId).single();
+      if (!provRow?.ecdh_private_key_wrapped) throw new Error('ECDH keys not set up yet.');
+      const kek = await getOrDeriveKEK(embWallet, providerId);
+      const ecdhPrivateKey = await unwrapECDHPrivateKey(provRow.ecdh_private_key_wrapped, kek);
+      const fileKey = await unwrapFileKeyFromSender(rec.encrypted_key, rec.ephemeral_public_key, ecdhPrivateKey);
+      const encryptedData = await fetchFromIPFS(rec.cid);
+      const iv = Uint8Array.from(atob(rec.iv), c => c.charCodeAt(0));
+      const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, fileKey, encryptedData);
+      const blob = new Blob([decrypted], { type: rec.file_type || 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = rec.file_name || 'vewr-record';
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+    } catch (e) {
+      setDlError(err => ({ ...err, [rec.id]: e.message || 'Download failed.' }));
+    }
+    setDownloading(d => ({ ...d, [rec.id]: false }));
   };
 
   const accepted = connections.filter(c => c.status === 'accepted');
@@ -550,7 +623,7 @@ function ProviderDashboard({ providerData, providerId, userEmail, onSignOut }) {
           {[
             { label: 'Connected Patients', value: accepted.length },
             { label: 'Pending Requests', value: pending.length },
-            { label: 'Records Shared', value: '—', note: 'Coming in next update' },
+            { label: 'Records Shared', value: sharedRecords.length },
           ].map(stat => (
             <div key={stat.label} style={{
               background: 'white', border: '1px solid #e5e7eb',
@@ -678,6 +751,68 @@ function ProviderDashboard({ providerData, providerId, userEmail, onSignOut }) {
             </div>
           )}
         </div>
+
+        {/* Shared Records panel */}
+        <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '20px', padding: '28px 32px', marginTop: '24px' }}>
+          <h2 style={{ fontSize: '17px', fontWeight: '700', color: '#111', margin: '0 0 16px 0' }}>Records Shared With Me</h2>
+
+          {loadingShared ? (
+            <div style={{ color: '#9ca3af', fontSize: '14px', textAlign: 'center', padding: '24px 0' }}>Loading…</div>
+          ) : sharedRecords.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '32px 0' }}>
+              <div style={{ fontSize: '28px', marginBottom: '10px' }}>📋</div>
+              <div style={{ color: '#374151', fontWeight: '600', fontSize: '14px', marginBottom: '4px' }}>No records yet</div>
+              <div style={{ color: '#9ca3af', fontSize: '13px' }}>When a patient shares a record with you it will appear here.</div>
+            </div>
+          ) : (
+            <>
+              {/* Patient selector */}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '20px' }}>
+                {Object.keys(patientGroups).map(pid => (
+                  <button key={pid} onClick={() => setSelectedPatient(selectedPatient === pid ? null : pid)}
+                    style={{
+                      padding: '7px 14px', borderRadius: '100px', border: `1px solid ${selectedPatient === pid ? T : '#e5e7eb'}`,
+                      background: selectedPatient === pid ? T : 'white', color: selectedPatient === pid ? 'white' : '#374151',
+                      fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: FONT,
+                    }}>
+                    {patientEmails[pid] || pid.slice(0, 8) + '…'}
+                    <span style={{ marginLeft: '6px', opacity: 0.7 }}>({patientGroups[pid].length})</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Record list for selected patient */}
+              {(selectedPatient ? patientGroups[selectedPatient] : sharedRecords).map(rec => (
+                <div key={rec.id} style={{
+                  display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 16px',
+                  borderRadius: '12px', background: '#f9fafb', border: '1px solid #f3f4f6', marginBottom: '10px',
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: '600', fontSize: '14px', color: '#111', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {rec.file_name || 'Medical Record'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#9ca3af' }}>
+                      {!selectedPatient && (patientEmails[rec.patient_id] || rec.patient_id.slice(0,8)+'…')}
+                      {!selectedPatient && ' · '}
+                      {rec.record_type ? rec.record_type.charAt(0).toUpperCase() + rec.record_type.slice(1) + ' · ' : ''}
+                      Shared {new Date(rec.granted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                    {dlError[rec.id] && <div style={{ fontSize: '12px', color: '#dc2626', marginTop: '3px' }}>{dlError[rec.id]}</div>}
+                  </div>
+                  <button onClick={() => handleProviderDownload(rec)} disabled={downloading[rec.id]}
+                    style={{
+                      padding: '8px 16px', background: downloading[rec.id] ? '#f3f4f6' : T,
+                      color: downloading[rec.id] ? '#9ca3af' : 'white', border: 'none',
+                      borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: downloading[rec.id] ? 'not-allowed' : 'pointer',
+                      fontFamily: FONT, whiteSpace: 'nowrap', flexShrink: 0,
+                    }}>
+                    {downloading[rec.id] ? 'Decrypting…' : '↓ Download'}
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -795,6 +930,7 @@ function ProviderPortalInner() {
       providerData={providerData}
       providerId={userId}
       userEmail={userEmail}
+      wallets={wallets}
       onSignOut={logout}
     />
   );

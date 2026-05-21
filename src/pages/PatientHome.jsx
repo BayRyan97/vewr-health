@@ -14,6 +14,7 @@ import {
   wrapFileKeyWithShareKey,
   generateECDHKeyPair,
   wrapECDHPrivateKey,
+  wrapFileKeyForRecipient,
 } from '../lib/webCryptoEncryption';
 import { createShareLink, getShareLinksForRecord, revokeShareLink, getAllShareLinksForUser } from '../lib/shareLinks';
 import { logAccess, getAccessLog } from '../lib/auditLog';
@@ -635,13 +636,180 @@ function SharePanel({ record, userId, onClose }) {
   );
 }
 
-function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
+// ─── Share With Provider Panel ────────────────────────────────────────────────
+function ShareWithProviderPanel({ record, userId, userEmail, wallets, onClose }) {
+  const [providers, setProviders] = useState([]);
+  const [existingAccess, setExistingAccess] = useState(new Set());
+  const [loadingProviders, setLoadingProviders] = useState(true);
+  const [sharing, setSharing] = useState({});
+  const [shareError, setShareError] = useState({});
+
+  const loadProviders = async () => {
+    setLoadingProviders(true);
+    const { data: connections } = await supabase
+      .from('connections')
+      .select('*')
+      .eq('patient_email', userEmail)
+      .eq('status', 'accepted');
+
+    if (!connections || connections.length === 0) {
+      setProviders([]);
+      setLoadingProviders(false);
+      return;
+    }
+
+    const providerIds = connections.map(c => c.provider_id);
+    const { data: provRows } = await supabase
+      .from('providers')
+      .select('user_id, first_name, last_name, credential, taxonomy, ecdh_public_key')
+      .in('user_id', providerIds);
+
+    setProviders(provRows || []);
+    setLoadingProviders(false);
+  };
+
+  const loadExistingAccess = async () => {
+    const { data: existing } = await supabase
+      .from('provider_access')
+      .select('provider_id')
+      .eq('record_id', record.id);
+    setExistingAccess(new Set((existing || []).map(r => r.provider_id)));
+  };
+
+  useEffect(() => {
+    loadProviders();
+    loadExistingAccess();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleShare = async (provider) => {
+    setSharing(s => ({ ...s, [provider.user_id]: true }));
+    setShareError(e => ({ ...e, [provider.user_id]: null }));
+    try {
+      const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
+      if (!embeddedWallet) throw new Error('Wallet not ready — please try again.');
+
+      let fileKey;
+      const keyVersion = record.metadata?.keyVersion || 1;
+      if (keyVersion >= 2) {
+        const kek = await getOrDeriveKEK(embeddedWallet, userId);
+        fileKey = await unwrapFileKey(record.metadata.encryptedKey, kek);
+      } else {
+        fileKey = await importPlainKey(record.metadata.encryptedKey);
+      }
+
+      const { ephemeralPublicKeyB64, wrappedFileKeyB64 } = await wrapFileKeyForRecipient(fileKey, provider.ecdh_public_key);
+
+      await supabase.from('provider_access').upsert({
+        provider_id: provider.user_id,
+        patient_id: userId,
+        record_id: record.id,
+        cid: record.cid,
+        encrypted_key: wrappedFileKeyB64,
+        ephemeral_public_key: ephemeralPublicKeyB64,
+        iv: record.metadata.iv,
+        file_name: record.metadata.originalFileName,
+        file_type: record.metadata.originalFileType,
+        record_type: record.metadata.recordType || null,
+      }, { onConflict: 'provider_id,record_id' });
+
+      await loadExistingAccess();
+    } catch (e) {
+      setShareError(err => ({ ...err, [provider.user_id]: e.message || 'Share failed.' }));
+    }
+    setSharing(s => ({ ...s, [provider.user_id]: false }));
+  };
+
+  return (
+    <div style={{
+      background: 'white', border: `1px solid ${T}25`,
+      borderRadius: '12px', padding: '20px 22px',
+      marginTop: '4px',
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2" strokeLinecap="round">
+            <path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6 6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3" />
+            <path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4" />
+            <circle cx="20" cy="10" r="2" />
+          </svg>
+          <span style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>Share with Provider</span>
+        </div>
+        <button onClick={onClose} style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: '#9ca3af', fontSize: '18px', lineHeight: 1, padding: '2px 4px',
+        }}>×</button>
+      </div>
+
+      {loadingProviders ? (
+        <div style={{ color: '#9ca3af', fontSize: '13px', textAlign: 'center', padding: '16px 0' }}>Loading providers…</div>
+      ) : providers.length === 0 ? (
+        <div style={{ color: '#6b7280', fontSize: '13px', textAlign: 'center', padding: '16px 0', lineHeight: '1.5' }}>
+          No connected providers yet. Accept a connection request first.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {providers.map(provider => {
+            const name = [provider.first_name, provider.last_name].filter(Boolean).join(' ');
+            const alreadyShared = existingAccess.has(provider.user_id);
+            const isSharingThis = sharing[provider.user_id];
+            const err = shareError[provider.user_id];
+            return (
+              <div key={provider.user_id} style={{
+                display: 'flex', alignItems: 'center', gap: '14px',
+                padding: '14px 16px', borderRadius: '10px',
+                background: '#f9fafb', border: '1px solid #f3f4f6',
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: '600', fontSize: '14px', color: '#111827' }}>
+                    {name ? `${name}${provider.credential ? `, ${provider.credential}` : ''}` : 'Provider'}
+                  </div>
+                  {provider.taxonomy && (
+                    <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>{provider.taxonomy}</div>
+                  )}
+                  {err && <div style={{ fontSize: '12px', color: '#dc2626', marginTop: '3px' }}>{err}</div>}
+                </div>
+                {alreadyShared ? (
+                  <span style={{
+                    fontSize: '12px', fontWeight: '600', padding: '5px 12px',
+                    borderRadius: '8px', background: '#ecfdf5', color: '#059669',
+                    border: '1px solid #6ee7b7', whiteSpace: 'nowrap', flexShrink: 0,
+                  }}>
+                    Shared ✓
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => handleShare(provider)}
+                    disabled={isSharingThis || !provider.ecdh_public_key}
+                    style={{
+                      padding: '7px 16px', background: isSharingThis ? '#f3f4f6' : T,
+                      color: isSharingThis ? '#9ca3af' : 'white',
+                      border: 'none', borderRadius: '8px',
+                      fontSize: '13px', fontWeight: '600',
+                      cursor: (isSharingThis || !provider.ecdh_public_key) ? 'not-allowed' : 'pointer',
+                      fontFamily: FONT, whiteSpace: 'nowrap', flexShrink: 0,
+                    }}
+                  >
+                    {isSharingThis ? 'Sharing…' : !provider.ecdh_public_key ? 'Not ready' : 'Share'}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RecordsList({ records, onDelete, onUpdate, userId = '', userEmail = '' }) {
   const { wallets } = useWallets();
   const [downloading, setDownloading] = useState({});
   const [dlError, setDlError] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState({});
   const [shareOpen, setShareOpen] = useState(null);
+  const [providerShareOpen, setProviderShareOpen] = useState(null);
   const [editOpen, setEditOpen] = useState(null);
   const [editFields, setEditFields] = useState({});
   const [saving, setSaving] = useState({});
@@ -716,6 +884,7 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
 
   const toggleShare = (recordId) => {
     setShareOpen(prev => prev === recordId ? null : recordId);
+    setProviderShareOpen(null);
     setConfirmDelete(null);
   };
 
@@ -731,6 +900,7 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
       },
     }));
     setShareOpen(null);
+    setProviderShareOpen(null);
     setConfirmDelete(null);
   };
 
@@ -896,6 +1066,7 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
         const isConfirming = confirmDelete === record.id;
         const isDeletingThis = deleting[record.id];
         const isShareOpen = shareOpen === record.id;
+        const isProviderShareOpen = providerShareOpen === record.id;
         const isEditOpen = editOpen === record.id;
         const isSaving = saving[record.id];
         const ef = editFields[record.id] || {};
@@ -904,7 +1075,7 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
           <div key={record.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <div style={{
               background: 'white', borderRadius: '12px',
-              border: `1px solid ${isConfirming ? '#fca5a5' : isShareOpen || isEditOpen ? `${T}40` : err ? '#fecaca' : '#e5e7eb'}`,
+              border: `1px solid ${isConfirming ? '#fca5a5' : isShareOpen || isProviderShareOpen || isEditOpen ? `${T}40` : err ? '#fecaca' : '#e5e7eb'}`,
               padding: '16px 20px',
               transition: 'border-color 0.2s',
             }}>
@@ -977,6 +1148,35 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
                       <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
                     </svg>
                     {!isMobile && 'Share'}
+                  </button>
+                )}
+
+                {/* Share with Provider button */}
+                {isSupabaseConfigured && (
+                  <button
+                    className={`share-btn${isProviderShareOpen ? ' share-btn-active' : ''}`}
+                    onClick={() => {
+                      setProviderShareOpen(prev => prev === record.id ? null : record.id);
+                      setShareOpen(null);
+                      setConfirmDelete(null);
+                    }}
+                    disabled={isDeletingThis}
+                    title="Share with provider"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: isMobile ? '0' : '5px',
+                      padding: isMobile ? '8px' : '7px 12px', borderRadius: '8px',
+                      border: '1px solid #e5e7eb', background: 'white',
+                      color: '#374151', fontSize: '13px', fontWeight: '500',
+                      cursor: isDeletingThis ? 'not-allowed' : 'pointer',
+                      fontFamily: FONT, transition: 'all 0.15s',
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6 6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3" />
+                      <path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4" />
+                      <circle cx="20" cy="10" r="2" />
+                    </svg>
+                    {!isMobile && 'Share with Dr.'}
                   </button>
                 )}
 
@@ -1122,6 +1322,17 @@ function RecordsList({ records, onDelete, onUpdate, userId = '' }) {
                 record={record}
                 userId={userId}
                 onClose={() => setShareOpen(null)}
+              />
+            )}
+
+            {/* Share with Provider panel */}
+            {isProviderShareOpen && (
+              <ShareWithProviderPanel
+                record={record}
+                userId={userId}
+                userEmail={userEmail}
+                wallets={wallets}
+                onClose={() => setProviderShareOpen(null)}
               />
             )}
 
@@ -1373,6 +1584,7 @@ function RequestsTab({ userEmail, userId }) {
   const [connections, setConnections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState({});
+  const [deleting, setDeleting] = useState({});
 
   const load = async () => {
     setLoading(true);
@@ -1515,6 +1727,7 @@ function RequestsTab({ userEmail, userId }) {
             const p = c.providers || {};
             const name = [p.first_name, p.last_name].filter(Boolean).join(' ');
             const accepted = c.status === 'accepted';
+            const isDeleting = deleting[c.id];
             return (
               <div key={c.id} style={{
                 background: 'white', borderRadius: '12px',
@@ -1538,6 +1751,25 @@ function RequestsTab({ userEmail, userId }) {
                 }}>
                   {accepted ? 'Connected' : 'Declined'}
                 </span>
+                {!accepted && (
+                  <button
+                    disabled={isDeleting}
+                    onClick={async () => {
+                      setDeleting(d => ({ ...d, [c.id]: true }));
+                      await supabase.from('connections').delete().eq('id', c.id);
+                      await load();
+                      setDeleting(d => ({ ...d, [c.id]: false }));
+                    }}
+                    title="Remove"
+                    style={{
+                      background: 'none', border: 'none', cursor: isDeleting ? 'not-allowed' : 'pointer',
+                      color: '#9ca3af', fontSize: '18px', lineHeight: 1, padding: '2px 4px',
+                      flexShrink: 0, opacity: isDeleting ? 0.4 : 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             );
           })}
@@ -2195,6 +2427,7 @@ function Dashboard({ userEmail, userId, onLogout }) {
             onDelete={handleDelete}
             onUpdate={(id, updatedMetadata) => setRecords(prev => prev.map(r => r.id === id ? { ...r, metadata: updatedMetadata } : r))}
             userId={userId}
+            userEmail={userEmail}
           />
         )}
         {activeTab === 'links' && <LinksTab userId={userId} />}
