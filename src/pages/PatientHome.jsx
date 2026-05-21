@@ -1376,12 +1376,30 @@ function RequestsTab({ userEmail, userId }) {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase
+    // Fetch connections first
+    const { data: connRows } = await supabase
       .from('connections')
-      .select('*, providers(first_name, last_name, credential, taxonomy, npi)')
+      .select('*')
       .eq('patient_email', userEmail)
       .order('requested_at', { ascending: false });
-    setConnections(data || []);
+
+    if (!connRows || connRows.length === 0) {
+      setConnections([]);
+      setLoading(false);
+      return;
+    }
+
+    // Fetch provider details separately (no FK defined so PostgREST join won't work)
+    const providerIds = [...new Set(connRows.map(c => c.provider_id))];
+    const { data: provRows } = await supabase
+      .from('providers')
+      .select('user_id, first_name, last_name, credential, taxonomy, npi')
+      .in('user_id', providerIds);
+
+    const provMap = {};
+    (provRows || []).forEach(p => { provMap[p.user_id] = p; });
+
+    setConnections(connRows.map(c => ({ ...c, providers: provMap[c.provider_id] || {} })));
     setLoading(false);
   };
 
