@@ -1639,25 +1639,33 @@ function Dashboard({ userEmail, userId, onLogout }) {
 
     (async () => {
       try {
+        console.log('[ECDH] starting setup for user:', userId);
+
         // Check if this user already has an ECDH key pair stored
-        const { data: userRow } = await supabase
+        const { data: userRow, error: fetchErr } = await supabase
           .from('users')
           .select('ecdh_public_key')
           .eq('user_id', userId)
           .single();
 
+        console.log('[ECDH] existing row:', userRow, 'fetch error:', fetchErr?.message);
+
         if (userRow?.ecdh_public_key) {
+          console.log('[ECDH] already set up, skipping');
           ecdhSetupRan.current = true;
           return; // Already set up
         }
 
         // Generate a new P-256 ECDH key pair
+        console.log('[ECDH] deriving KEK...');
         const kek = await getOrDeriveKEK(embeddedWallet, userId);
+        console.log('[ECDH] KEK derived, generating key pair...');
         const { publicKeyB64, privateKey } = await generateECDHKeyPair();
         const wrappedPrivateKeyB64 = await wrapECDHPrivateKey(privateKey, kek);
+        console.log('[ECDH] key pair generated, upserting to Supabase...');
 
         // Store in the users table
-        await supabase
+        const { error: upsertErr } = await supabase
           .from('users')
           .upsert({
             user_id: userId,
@@ -1665,9 +1673,10 @@ function Dashboard({ userEmail, userId, onLogout }) {
             ecdh_private_key_wrapped: wrappedPrivateKeyB64,
           }, { onConflict: 'user_id' });
 
+        console.log('[ECDH] upsert done, error:', upsertErr?.message);
         ecdhSetupRan.current = true;
       } catch (e) {
-        // Non-fatal — will retry on next login
+        console.error('[ECDH] setup failed:', e);
       }
     })();
   }, [wallets, userId]);
