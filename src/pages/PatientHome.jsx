@@ -1367,6 +1367,167 @@ function ActivityTab({ userId }) {
   );
 }
 
+// ─── Requests Tab ────────────────────────────────────────────────────────────
+function RequestsTab({ userEmail, userId }) {
+  const [connections, setConnections] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState({});
+
+  const load = async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from('connections')
+      .select('*, providers(first_name, last_name, credential, taxonomy, npi)')
+      .eq('patient_email', userEmail)
+      .order('requested_at', { ascending: false });
+    setConnections(data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [userEmail]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const respond = async (id, status) => {
+    setActing(a => ({ ...a, [id]: true }));
+    await supabase
+      .from('connections')
+      .update({ status, patient_id: userId, responded_at: new Date().toISOString() })
+      .eq('id', id);
+    await load();
+    setActing(a => ({ ...a, [id]: false }));
+  };
+
+  const formatDate = ts => new Date(ts).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+  });
+
+  if (loading) return (
+    <div style={{ textAlign: 'center', padding: '60px 0', color: '#9ca3af', fontSize: '14px' }}>
+      Loading requests…
+    </div>
+  );
+
+  if (connections.length === 0) return (
+    <div style={{ textAlign: 'center', padding: '60px 0' }}>
+      <div style={{ fontSize: '32px', marginBottom: '12px' }}>🩺</div>
+      <div style={{ color: '#374151', fontWeight: '600', fontSize: '15px', marginBottom: '6px' }}>No connection requests</div>
+      <div style={{ color: '#9ca3af', fontSize: '13px' }}>When a provider sends you a request it will appear here.</div>
+    </div>
+  );
+
+  const pending = connections.filter(c => c.status === 'pending');
+  const others = connections.filter(c => c.status !== 'pending');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {pending.length > 0 && (
+        <div style={{ marginBottom: '4px' }}>
+          <div style={{ fontSize: '12px', fontWeight: '700', color: '#6b7280', letterSpacing: '0.5px', marginBottom: '10px' }}>
+            PENDING ({pending.length})
+          </div>
+          {pending.map(c => {
+            const p = c.providers || {};
+            const name = [p.first_name, p.last_name].filter(Boolean).join(' ');
+            const isActing = acting[c.id];
+            return (
+              <div key={c.id} style={{
+                background: 'white', borderRadius: '14px',
+                border: `1px solid ${T}30`, padding: '20px 22px',
+                display: 'flex', alignItems: 'center', gap: '16px',
+                boxShadow: `0 2px 12px ${T}10`,
+              }}>
+                <div style={{
+                  width: '44px', height: '44px', borderRadius: '12px', flexShrink: 0,
+                  background: `${T}15`, border: `1px solid ${T}30`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '20px',
+                }}>🩺</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: '700', fontSize: '15px', color: '#111827' }}>
+                    {name ? `${name}${p.credential ? `, ${p.credential}` : ''}` : 'Provider'}
+                  </div>
+                  {p.taxonomy && (
+                    <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '2px' }}>{p.taxonomy}</div>
+                  )}
+                  <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '3px' }}>
+                    Requested {formatDate(c.requested_at)}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                  <button
+                    onClick={() => respond(c.id, 'declined')}
+                    disabled={isActing}
+                    style={{
+                      padding: '8px 14px', borderRadius: '9px',
+                      border: '1px solid #e5e7eb', background: 'white',
+                      color: '#6b7280', fontSize: '13px', fontWeight: '600',
+                      cursor: isActing ? 'not-allowed' : 'pointer', fontFamily: FONT,
+                    }}
+                  >
+                    Decline
+                  </button>
+                  <button
+                    onClick={() => respond(c.id, 'accepted')}
+                    disabled={isActing}
+                    style={{
+                      padding: '8px 16px', borderRadius: '9px',
+                      border: 'none', background: T,
+                      color: 'white', fontSize: '13px', fontWeight: '600',
+                      cursor: isActing ? 'not-allowed' : 'pointer', fontFamily: FONT,
+                      boxShadow: `0 2px 8px ${T}40`,
+                    }}
+                  >
+                    {isActing ? '…' : 'Accept'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {others.length > 0 && (
+        <div>
+          {pending.length > 0 && (
+            <div style={{ fontSize: '12px', fontWeight: '700', color: '#6b7280', letterSpacing: '0.5px', marginBottom: '10px' }}>
+              PREVIOUS
+            </div>
+          )}
+          {others.map(c => {
+            const p = c.providers || {};
+            const name = [p.first_name, p.last_name].filter(Boolean).join(' ');
+            const accepted = c.status === 'accepted';
+            return (
+              <div key={c.id} style={{
+                background: 'white', borderRadius: '12px',
+                border: '1px solid #e5e7eb', padding: '16px 20px',
+                display: 'flex', alignItems: 'center', gap: '14px',
+                marginBottom: '8px',
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: '600', fontSize: '14px', color: '#374151' }}>
+                    {name ? `${name}${p.credential ? `, ${p.credential}` : ''}` : 'Provider'}
+                  </div>
+                  {p.taxonomy && (
+                    <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>{p.taxonomy}</div>
+                  )}
+                </div>
+                <span style={{
+                  fontSize: '11px', fontWeight: '700', padding: '3px 10px', borderRadius: '100px',
+                  background: accepted ? '#ecfdf5' : '#f9fafb',
+                  color: accepted ? '#059669' : '#9ca3af',
+                  border: `1px solid ${accepted ? '#6ee7b7' : '#e5e7eb'}`,
+                }}>
+                  {accepted ? 'Connected' : 'Declined'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Links Tab ────────────────────────────────────────────────────────────────
 function LinksTab({ userId }) {
   const [links, setLinks] = useState([]);
@@ -1674,6 +1835,18 @@ function Dashboard({ userEmail, userId, onLogout }) {
 
   const [activeTab, setActiveTab] = useState('upload');
   const [records, setRecords] = useState([]);
+  const [pendingRequestCount, setPendingRequestCount] = useState(0);
+
+  // Keep pending connection request badge up to date
+  useEffect(() => {
+    if (!userEmail || !isSupabaseConfigured) return;
+    supabase
+      .from('connections')
+      .select('id', { count: 'exact', head: true })
+      .eq('patient_email', userEmail)
+      .eq('status', 'pending')
+      .then(({ count }) => setPendingRequestCount(count || 0));
+  }, [userEmail]);
 
   // Namespace by user ID for localStorage fallback
   const storageKey = `vewr_records_${userId}`;
@@ -1968,6 +2141,7 @@ function Dashboard({ userEmail, userId, onLogout }) {
             { id: 'records', label: `My Records (${records.length})` },
             { id: 'links', label: 'Share Links' },
             { id: 'activity', label: 'Activity' },
+            { id: 'requests', label: 'Requests', badge: pendingRequestCount },
           ].map(tab => (
             <button
               key={tab.id}
@@ -1979,9 +2153,18 @@ function Dashboard({ userEmail, userId, onLogout }) {
                 color: activeTab === tab.id ? '#111827' : '#6b7280',
                 boxShadow: activeTab === tab.id ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
                 transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', gap: '6px', position: 'relative',
               }}
             >
               {tab.label}
+              {tab.badge > 0 && (
+                <span style={{
+                  background: T, color: 'white', fontSize: '11px', fontWeight: '700',
+                  borderRadius: '100px', padding: '1px 6px', lineHeight: '1.4',
+                }}>
+                  {tab.badge}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -1997,6 +2180,7 @@ function Dashboard({ userEmail, userId, onLogout }) {
         )}
         {activeTab === 'links' && <LinksTab userId={userId} />}
         {activeTab === 'activity' && <ActivityTab userId={userId} />}
+        {activeTab === 'requests' && <RequestsTab userEmail={userEmail} userId={userId} />}
       </div>
     </div>
   );

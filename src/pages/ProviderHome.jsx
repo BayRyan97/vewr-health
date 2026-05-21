@@ -420,10 +420,68 @@ function NPIVerificationFlow({ userId, embeddedWallet, onVerified }) {
 }
 
 // ─── Provider Dashboard ───────────────────────────────────────────────────────
-function ProviderDashboard({ providerData, userEmail, onSignOut }) {
+function ProviderDashboard({ providerData, providerId, userEmail, onSignOut }) {
   const displayName = providerData.isOrg
     ? providerData.organization
     : `${providerData.first_name || ''} ${providerData.last_name || ''}`.trim();
+
+  const [connections, setConnections] = useState([]);
+  const [loadingConnections, setLoadingConnections] = useState(true);
+  const [patientEmail, setPatientEmail] = useState('');
+  const [sendingRequest, setSendingRequest] = useState(false);
+  const [requestMsg, setRequestMsg] = useState(null); // { type: 'success'|'error', text }
+
+  const loadConnections = async () => {
+    setLoadingConnections(true);
+    const { data } = await supabase
+      .from('connections')
+      .select('*')
+      .eq('provider_id', providerId)
+      .order('requested_at', { ascending: false });
+    setConnections(data || []);
+    setLoadingConnections(false);
+  };
+
+  useEffect(() => { loadConnections(); }, [providerId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSendRequest = async (e) => {
+    e.preventDefault();
+    const email = patientEmail.trim().toLowerCase();
+    if (!email) return;
+    setSendingRequest(true);
+    setRequestMsg(null);
+
+    // Check if already connected or pending
+    const existing = connections.find(c => c.patient_email === email);
+    if (existing) {
+      setRequestMsg({
+        type: 'error',
+        text: existing.status === 'accepted'
+          ? 'You are already connected with this patient.'
+          : 'A pending request already exists for this email.',
+      });
+      setSendingRequest(false);
+      return;
+    }
+
+    const { error } = await supabase.from('connections').insert({
+      provider_id: providerId,
+      patient_email: email,
+      status: 'pending',
+    });
+
+    if (error) {
+      setRequestMsg({ type: 'error', text: 'Could not send request. Please try again.' });
+    } else {
+      setRequestMsg({ type: 'success', text: `Request sent to ${email}. They'll see it when they log in.` });
+      setPatientEmail('');
+      await loadConnections();
+    }
+    setSendingRequest(false);
+  };
+
+  const accepted = connections.filter(c => c.status === 'accepted');
+  const pending = connections.filter(c => c.status === 'pending');
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafb', fontFamily: FONT }}>
@@ -452,10 +510,9 @@ function ProviderDashboard({ providerData, userEmail, onSignOut }) {
             PROVIDER
           </span>
         </div>
-
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <CheckCircleIcon size={16} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <CheckCircleIcon size={15} />
             <span style={{ fontSize: '13px', color: T, fontWeight: '600' }}>NPI Verified</span>
           </div>
           <div style={{ width: '1px', height: '20px', background: '#e5e7eb' }} />
@@ -475,57 +532,145 @@ function ProviderDashboard({ providerData, userEmail, onSignOut }) {
         {/* Welcome */}
         <div style={{ marginBottom: '40px' }}>
           <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#111', margin: '0 0 8px 0', letterSpacing: '-0.5px' }}>
-            Welcome{displayName ? `, ${displayName}` : ''}
-            {providerData.credential ? `, ${providerData.credential}` : ''}
+            {displayName ? `${displayName}${providerData.credential ? `, ${providerData.credential}` : ''}` : 'Provider Dashboard'}
           </h1>
           <p style={{ color: '#6b7280', fontSize: '15px', margin: 0 }}>
             {providerData.taxonomy || 'Healthcare Provider'} · NPI {providerData.npi}
           </p>
         </div>
 
-        {/* Stats row */}
+        {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '40px' }}>
           {[
-            { label: 'Connected Patients', value: '—', note: 'Coming soon' },
-            { label: 'Records Shared With You', value: '—', note: 'Coming soon' },
-            { label: 'Pending Requests', value: '—', note: 'Coming soon' },
+            { label: 'Connected Patients', value: accepted.length },
+            { label: 'Pending Requests', value: pending.length },
+            { label: 'Records Shared', value: '—', note: 'Coming in next update' },
           ].map(stat => (
             <div key={stat.label} style={{
-              background: 'white', border: '1px solid #e5e7eb', borderRadius: '16px',
-              padding: '24px', textAlign: 'center',
+              background: 'white', border: '1px solid #e5e7eb',
+              borderRadius: '16px', padding: '24px', textAlign: 'center',
             }}>
               <div style={{ fontSize: '28px', fontWeight: '700', color: '#111', marginBottom: '4px' }}>
                 {stat.value}
               </div>
-              <div style={{ fontSize: '13px', color: '#374151', fontWeight: '600', marginBottom: '2px' }}>
+              <div style={{ fontSize: '13px', color: '#374151', fontWeight: '600', marginBottom: stat.note ? '2px' : 0 }}>
                 {stat.label}
               </div>
-              <div style={{ fontSize: '11px', color: '#9ca3af' }}>{stat.note}</div>
+              {stat.note && <div style={{ fontSize: '11px', color: '#9ca3af' }}>{stat.note}</div>}
             </div>
           ))}
         </div>
 
-        {/* Coming soon panel */}
+        {/* Send connection request */}
         <div style={{
-          background: 'white', border: '1px solid #e5e7eb', borderRadius: '20px',
-          padding: '48px', textAlign: 'center',
+          background: 'white', border: '1px solid #e5e7eb',
+          borderRadius: '20px', padding: '28px 32px', marginBottom: '24px',
         }}>
-          <div style={{
-            width: '56px', height: '56px', borderRadius: '14px',
-            background: `${T}12`, border: `1px solid ${T}25`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 20px',
-          }}>
-            <StethoscopeIcon size={28} />
-          </div>
-          <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#111', margin: '0 0 10px 0', letterSpacing: '-0.3px' }}>
-            Patient connections coming soon
+          <h2 style={{ fontSize: '17px', fontWeight: '700', color: '#111', margin: '0 0 6px 0', letterSpacing: '-0.3px' }}>
+            Connect with a patient
           </h2>
-          <p style={{ color: '#6b7280', fontSize: '14px', maxWidth: '400px', margin: '0 auto', lineHeight: '1.6' }}>
-            Once the connection system is live, patients will be able to send you a
-            request and selectively share individual records — fully encrypted end-to-end.
-            You'll see them here.
+          <p style={{ color: '#6b7280', fontSize: '13px', margin: '0 0 20px 0', lineHeight: '1.5' }}>
+            Enter the patient's email address. They'll see your request when they next log into Vewr and can choose to accept or decline.
           </p>
+          <form onSubmit={handleSendRequest} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+            <input
+              type="email"
+              placeholder="patient@email.com"
+              value={patientEmail}
+              onChange={e => { setPatientEmail(e.target.value); setRequestMsg(null); }}
+              style={{
+                flex: 1, padding: '11px 16px',
+                border: '1px solid #e5e7eb', borderRadius: '10px',
+                fontSize: '14px', fontFamily: FONT, color: '#111', outline: 'none',
+                transition: 'border-color 0.2s',
+              }}
+              onFocus={e => { e.target.style.borderColor = T; }}
+              onBlur={e => { e.target.style.borderColor = '#e5e7eb'; }}
+              disabled={sendingRequest}
+            />
+            <button type="submit" disabled={sendingRequest || !patientEmail.trim()} style={{
+              padding: '11px 22px', background: T, color: 'white',
+              border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: '600',
+              cursor: sendingRequest || !patientEmail.trim() ? 'not-allowed' : 'pointer',
+              fontFamily: FONT, whiteSpace: 'nowrap',
+              opacity: !patientEmail.trim() ? 0.5 : 1,
+              boxShadow: `0 2px 8px ${T}30`,
+            }}>
+              {sendingRequest ? 'Sending…' : 'Send request'}
+            </button>
+          </form>
+          {requestMsg && (
+            <p style={{
+              marginTop: '12px', fontSize: '13px', lineHeight: '1.4',
+              color: requestMsg.type === 'success' ? '#059669' : '#dc2626',
+            }}>
+              {requestMsg.text}
+            </p>
+          )}
+        </div>
+
+        {/* Connection list */}
+        <div style={{
+          background: 'white', border: '1px solid #e5e7eb',
+          borderRadius: '20px', padding: '28px 32px',
+        }}>
+          <h2 style={{ fontSize: '17px', fontWeight: '700', color: '#111', margin: '0 0 20px 0', letterSpacing: '-0.3px' }}>
+            Patients
+          </h2>
+
+          {loadingConnections ? (
+            <div style={{ color: '#9ca3af', fontSize: '14px', textAlign: 'center', padding: '24px 0' }}>
+              Loading…
+            </div>
+          ) : connections.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '32px 0' }}>
+              <div style={{ fontSize: '28px', marginBottom: '10px' }}>🩺</div>
+              <div style={{ color: '#374151', fontWeight: '600', fontSize: '14px', marginBottom: '4px' }}>
+                No patients yet
+              </div>
+              <div style={{ color: '#9ca3af', fontSize: '13px' }}>
+                Send a connection request above to get started.
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {connections.map(c => (
+                <div key={c.id} style={{
+                  display: 'flex', alignItems: 'center', gap: '14px',
+                  padding: '14px 16px', borderRadius: '12px',
+                  background: '#f9fafb', border: '1px solid #f3f4f6',
+                }}>
+                  <div style={{
+                    width: '36px', height: '36px', borderRadius: '50%',
+                    background: c.status === 'accepted' ? `${T}15` : '#f3f4f6',
+                    border: `1px solid ${c.status === 'accepted' ? T + '30' : '#e5e7eb'}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '16px', flexShrink: 0,
+                  }}>
+                    {c.status === 'accepted' ? '✓' : '⏳'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: '600', fontSize: '14px', color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {c.patient_email}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>
+                      Requested {new Date(c.requested_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {c.responded_at && ` · Responded ${new Date(c.responded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: '11px', fontWeight: '700', padding: '3px 10px',
+                    borderRadius: '100px', flexShrink: 0,
+                    background: c.status === 'accepted' ? '#ecfdf5' : c.status === 'declined' ? '#fef2f2' : '#fffbeb',
+                    color: c.status === 'accepted' ? '#059669' : c.status === 'declined' ? '#dc2626' : '#d97706',
+                    border: `1px solid ${c.status === 'accepted' ? '#6ee7b7' : c.status === 'declined' ? '#fca5a5' : '#fde68a'}`,
+                  }}>
+                    {c.status === 'accepted' ? 'Connected' : c.status === 'declined' ? 'Declined' : 'Pending'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -619,6 +764,7 @@ function ProviderHome() {
   return (
     <ProviderDashboard
       providerData={providerData}
+      providerId={userId}
       userEmail={userEmail}
       onSignOut={logout}
     />
