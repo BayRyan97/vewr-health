@@ -643,6 +643,7 @@ function ShareWithProviderPanel({ record, userId, userEmail, wallets, onClose })
   const [loadingProviders, setLoadingProviders] = useState(true);
   const [sharing, setSharing] = useState({});
   const [shareError, setShareError] = useState({});
+  const [confirmProvider, setConfirmProvider] = useState(null);
 
   const loadProviders = async () => {
     setLoadingProviders(true);
@@ -713,10 +714,98 @@ function ShareWithProviderPanel({ record, userId, userEmail, wallets, onClose })
       }, { onConflict: 'provider_id,record_id' });
 
       await loadExistingAccess();
+      setConfirmProvider(null);
     } catch (e) {
       setShareError(err => ({ ...err, [provider.user_id]: e.message || 'Share failed.' }));
+      setConfirmProvider(null);
     }
     setSharing(s => ({ ...s, [provider.user_id]: false }));
+  };
+
+  const renderConfirmView = () => {
+    const pName = [confirmProvider.first_name, confirmProvider.last_name].filter(Boolean).join(' ');
+    const rName = record.metadata?.recordName || record.metadata?.originalFileName || 'Medical Record';
+    const rType = getRecordType(record.metadata?.recordType);
+    const rDate = record.metadata?.recordDate
+      ? new Date(record.metadata.recordDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : null;
+    const isSharingThis = sharing[confirmProvider.user_id];
+    const err = shareError[confirmProvider.user_id];
+    return (
+      <div>
+        <button onClick={() => setConfirmProvider(null)} style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: '#9ca3af', fontSize: '13px', fontFamily: FONT,
+          display: 'flex', alignItems: 'center', gap: '4px',
+          padding: '0', marginBottom: '16px',
+        }}>
+          ← Back to providers
+        </button>
+
+        <div style={{ marginBottom: '14px' }}>
+          <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+            Sharing with
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '10px', background: '#f9fafb', border: '1px solid #f3f4f6' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: `${T}15`, border: `1px solid ${T}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>🩺</div>
+            <div>
+              <div style={{ fontWeight: '600', fontSize: '14px', color: '#111827' }}>
+                {pName ? `${pName}${confirmProvider.credential ? `, ${confirmProvider.credential}` : ''}` : 'Provider'}
+              </div>
+              {confirmProvider.taxonomy && <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>{confirmProvider.taxonomy}</div>}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: '14px' }}>
+          <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+            Record being shared
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '10px', background: '#f9fafb', border: '1px solid #f3f4f6' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '9px', background: rType ? rType.bg : '#f0fdfb', border: `1px solid ${rType ? rType.border : `${T}25`}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={rType ? rType.color : T} strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap', marginBottom: '3px' }}>
+                <span style={{ fontWeight: '600', fontSize: '14px', color: '#111827' }}>{rName}</span>
+                {rType && <span style={{ fontSize: '11px', fontWeight: '600', padding: '1px 8px', borderRadius: '100px', background: rType.bg, color: rType.color, border: `1px solid ${rType.border}` }}>{rType.label}</span>}
+              </div>
+              {rDate && <div style={{ fontSize: '12px', color: '#9ca3af' }}>Record date: {rDate}</div>}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ background: `${T}08`, border: `1px solid ${T}25`, borderRadius: '10px', padding: '12px 14px', marginBottom: '14px', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginTop: '2px', flexShrink: 0 }}>
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+          <p style={{ fontSize: '13px', color: '#374151', margin: 0, lineHeight: '1.6' }}>
+            <strong>{pName || 'This provider'}</strong> will only be able to access this one file.
+            Your other records stay private unless you explicitly share them separately.
+          </p>
+        </div>
+
+        {err && <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', fontSize: '13px', color: '#dc2626', marginBottom: '12px' }}>{err}</div>}
+
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={() => setConfirmProvider(null)} disabled={isSharingThis} style={{ flex: 1, padding: '10px 14px', background: 'white', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: '9px', fontSize: '14px', fontWeight: '500', cursor: isSharingThis ? 'not-allowed' : 'pointer', fontFamily: FONT }}>
+            Cancel
+          </button>
+          <button
+            onClick={() => handleShare(confirmProvider)}
+            disabled={isSharingThis || !confirmProvider.ecdh_public_key}
+            style={{ flex: 2, padding: '10px 18px', background: isSharingThis ? '#e5e7eb' : T, color: isSharingThis ? '#9ca3af' : 'white', border: 'none', borderRadius: '9px', fontSize: '14px', fontWeight: '600', cursor: (isSharingThis || !confirmProvider.ecdh_public_key) ? 'not-allowed' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', boxShadow: (isSharingThis || !confirmProvider.ecdh_public_key) ? 'none' : `0 3px 10px ${T}35` }}
+          >
+            {isSharingThis ? (
+              <><div style={{ width: '12px', height: '12px', borderRadius: '50%', border: '2px solid #9ca3af', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />Sharing…</>
+            ) : 'Confirm share →'}
+          </button>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -747,7 +836,7 @@ function ShareWithProviderPanel({ record, userId, userEmail, wallets, onClose })
         <div style={{ color: '#6b7280', fontSize: '13px', textAlign: 'center', padding: '16px 0', lineHeight: '1.5' }}>
           No connected providers yet. Accept a connection request first.
         </div>
-      ) : (
+      ) : confirmProvider ? renderConfirmView() : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {providers.map(provider => {
             const name = [provider.first_name, provider.last_name].filter(Boolean).join(' ');
@@ -779,7 +868,7 @@ function ShareWithProviderPanel({ record, userId, userEmail, wallets, onClose })
                   </span>
                 ) : (
                   <button
-                    onClick={() => handleShare(provider)}
+                    onClick={() => setConfirmProvider(provider)}
                     disabled={isSharingThis || !provider.ecdh_public_key}
                     style={{
                       padding: '7px 16px', background: isSharingThis ? '#f3f4f6' : T,
